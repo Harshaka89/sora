@@ -33,7 +33,7 @@ if (!$is_admin) {
             </div>
         </div>
         
-      <!-- Success/Error Messages -->
+     <!-- Success/Error Messages -->
 <?php if (isset($_GET['message'])): ?>
     <div style="padding: 15px; margin: 20px 0; border-radius: 8px; border: 2px solid; <?php
         switch($_GET['message']) {
@@ -43,32 +43,29 @@ if (!$is_admin) {
                 break;
             case 'missing_fields':
                 echo 'background: #f8d7da; color: #721c24; border-color: #dc3545;';
-                $msg = '❌ Missing required fields: Name, Email, and Phone are required!';
+                $msg = '❌ Missing required fields. Please fill in all required information.';
                 break;
-            case 'confirmed':
-                echo 'background: #d4edda; color: #155724; border-color: #28a745;';
-                $msg = '✅ Reservation confirmed successfully!';
-                break;
-            case 'cancelled':
+            case 'invalid_nonce':
                 echo 'background: #f8d7da; color: #721c24; border-color: #dc3545;';
-                $msg = '❌ Reservation cancelled successfully!';
+                $msg = '❌ Security check failed. Please try again.';
                 break;
-            case 'updated':
-                echo 'background: #cce7ff; color: #004085; border-color: #007cba;';
-                $msg = '✅ Reservation updated successfully!';
-                break;
-            case 'deleted':
+            case 'db_error':
                 echo 'background: #f8d7da; color: #721c24; border-color: #dc3545;';
-                $msg = '🗑️ Reservation deleted successfully!';
+                $msg = '❌ Database error occurred. Please check if the reservations table exists.';
+                break;
+            case 'exception_error':
+                echo 'background: #f8d7da; color: #721c24; border-color: #dc3545;';
+                $msg = '❌ System error occurred. Please check the error logs for details.';
                 break;
             default:
                 echo 'background: #f8d7da; color: #721c24; border-color: #dc3545;';
-                $msg = '❌ An error occurred. Please check the system logs.';
+                $msg = '❌ An error occurred. Please check the system logs for details.';
         }
     ?>">
         <h4 style="margin: 0;"><?php echo $msg; ?></h4>
     </div>
 <?php endif; ?>
+
 
         
         <!-- Statistics Cards -->
