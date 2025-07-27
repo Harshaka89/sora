@@ -1,6 +1,6 @@
 <?php
 /**
- * Reservation Model - Yenolx Restaurant Reservation v1.5
+ * Reservation Model - Fixed for Manual Reservations v1.5.1
  */
 
 if (!defined('ABSPATH')) exit;
@@ -13,6 +13,46 @@ class YRR_Reservation_Model {
         global $wpdb;
         $this->wpdb = $wpdb;
         $this->table_name = $wpdb->prefix . 'yrr_reservations';
+    }
+    
+    public function create($data) {
+        // Ensure required fields have defaults
+        $defaults = array(
+            'reservation_code' => $this->generate_reservation_code(),
+            'customer_name' => '',
+            'customer_email' => '',
+            'customer_phone' => '',
+            'party_size' => 1,
+            'reservation_date' => date('Y-m-d'),
+            'reservation_time' => '19:00:00',
+            'special_requests' => '',
+            'status' => 'pending',
+            'table_id' => null,
+            'coupon_code' => null,
+            'original_price' => 0.00,
+            'discount_amount' => 0.00,
+            'final_price' => 0.00,
+            'price_breakdown' => null,
+            'notes' => '',
+            'created_at' => current_time('mysql'),
+            'updated_at' => current_time('mysql')
+        );
+        
+        $data = array_merge($defaults, $data);
+        
+        // Validate required fields
+        if (empty($data['customer_name']) || empty($data['customer_email'])) {
+            return false;
+        }
+        
+        $result = $this->wpdb->insert($this->table_name, $data);
+        
+        if ($result === false) {
+            error_log('YRR: Failed to create reservation - ' . $this->wpdb->last_error);
+            return false;
+        }
+        
+        return $this->wpdb->insert_id;
     }
     
     public function get_all() {
@@ -42,10 +82,13 @@ class YRR_Reservation_Model {
         ));
     }
     
-    public function create($data) {
-        $data['created_at'] = current_time('mysql');
-        $data['updated_at'] = current_time('mysql');
-        return $this->wpdb->insert($this->table_name, $data);
+    public function get_weekly_reservations($start_date = null) {
+        if (!$start_date) {
+            $start_date = date('Y-m-d', strtotime('monday this week'));
+        }
+        $end_date = date('Y-m-d', strtotime($start_date . ' +6 days'));
+        
+        return $this->get_by_date_range($start_date, $end_date);
     }
     
     public function update($id, $data) {
@@ -67,10 +110,10 @@ class YRR_Reservation_Model {
         ));
         
         return array(
-            'total' => $total,
-            'confirmed' => $confirmed,
-            'pending' => $pending,
-            'today' => $today
+            'total' => intval($total),
+            'confirmed' => intval($confirmed),
+            'pending' => intval($pending),
+            'today' => intval($today)
         );
     }
     
@@ -79,8 +122,9 @@ class YRR_Reservation_Model {
         $params = array();
         
         if (!empty($search)) {
-            $where_conditions[] = "(customer_name LIKE %s OR customer_email LIKE %s OR customer_phone LIKE %s)";
+            $where_conditions[] = "(customer_name LIKE %s OR customer_email LIKE %s OR customer_phone LIKE %s OR reservation_code LIKE %s)";
             $search_term = '%' . $search . '%';
+            $params[] = $search_term;
             $params[] = $search_term;
             $params[] = $search_term;
             $params[] = $search_term;
@@ -110,6 +154,13 @@ class YRR_Reservation_Model {
         } else {
             return $this->wpdb->get_results($sql);
         }
+    }
+    
+    private function generate_reservation_code() {
+        $prefix = 'YRR';
+        $date = date('Ymd');
+        $random = str_pad(rand(1, 999), 3, '0', STR_PAD_LEFT);
+        return $prefix . '-' . $date . '-' . $random;
     }
 }
 ?>

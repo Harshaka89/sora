@@ -59,20 +59,33 @@ class YRR_Admin_Controller {
         return current_user_can('administrator');
     }
     
-    public function add_admin_menu() {
-        add_menu_page(
-            'Yenolx Reservations',
-            'Reservations',
-            'yrr_view_dashboard',
-            'yenolx-reservations',
-            array($this, 'dashboard_page'),
-            'dashicons-calendar-alt',
-            26
-        );
-        
-        add_submenu_page('yenolx-reservations', 'Dashboard', 'Dashboard', 'yrr_view_dashboard', 'yenolx-reservations', array($this, 'dashboard_page'));
-        add_submenu_page('yenolx-reservations', 'All Reservations', 'All Reservations', 'yrr_manage_reservations', 'yrr-all-reservations', array($this, 'all_reservations_page'));
-        
+public function add_admin_menu() {
+    add_menu_page(
+        'Yenolx Reservations',
+        'Reservations',
+        'yrr_view_dashboard',
+        'yenolx-reservations',
+        array($this, 'dashboard_page'),
+        'dashicons-calendar-alt',
+        26
+    );
+    
+    add_submenu_page('yenolx-reservations', 'Dashboard', 'Dashboard', 'yrr_view_dashboard', 'yenolx-reservations', array($this, 'dashboard_page'));
+    add_submenu_page('yenolx-reservations', 'All Reservations', 'All Reservations', 'yrr_manage_reservations', 'yrr-all-reservations', array($this, 'all_reservations_page'));
+    
+    // ✨ NEW: Add Weekly View Menu Item
+    add_submenu_page('yenolx-reservations', 'Weekly View', 'Weekly View', 'yrr_manage_reservations', 'yrr-weekly-reservations', array($this, 'weekly_reservations_page'));
+    
+    // Super Admin only pages
+    if ($this->is_super_admin()) {
+        add_submenu_page('yenolx-reservations', 'Tables Management', 'Tables', 'yrr_manage_tables', 'yrr-tables', array($this, 'tables_page'));
+        add_submenu_page('yenolx-reservations', 'Operating Hours', 'Hours', 'yrr_manage_hours', 'yrr-hours', array($this, 'hours_page'));
+        add_submenu_page('yenolx-reservations', 'Pricing Rules', 'Pricing', 'yrr_manage_pricing', 'yrr-pricing', array($this, 'pricing_page'));
+        add_submenu_page('yenolx-reservations', 'Discount Coupons', 'Coupons', 'yrr_manage_coupons', 'yrr-coupons', array($this, 'coupons_page'));
+        add_submenu_page('yenolx-reservations', 'Settings', 'Settings', 'yrr_manage_settings', 'yrr-settings', array($this, 'settings_page'));
+    }
+}
+  
         // Super Admin only pages
         if ($this->is_super_admin()) {
             add_submenu_page('yenolx-reservations', 'Tables Management', 'Tables', 'yrr_manage_tables', 'yrr-tables', array($this, 'tables_page'));
