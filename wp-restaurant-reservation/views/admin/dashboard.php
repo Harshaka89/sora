@@ -493,3 +493,139 @@ button:hover, a[style*="background:"]:hover {
     transition: all 0.3s ease;
 }
 </style>
+
+
+
+
+<!-- Enhanced Edit Modal with Table Assignment -->
+<div id="editModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 10000; align-items: center; justify-content: center;">
+    <div style="background: white; padding: 30px; border-radius: 20px; width: 90%; max-width: 700px; max-height: 90vh; overflow-y: auto;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; padding-bottom: 15px; border-bottom: 2px solid #e9ecef;">
+            <h3 style="margin: 0;">✏️ Edit Reservation</h3>
+            <button onclick="closeModal()" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #6c757d;">×</button>
+        </div>
+        
+        <form method="post" action="">
+            <?php wp_nonce_field('edit_reservation', 'edit_nonce'); ?>
+            <input type="hidden" id="edit_id" name="reservation_id">
+            <input type="hidden" name="edit_reservation" value="1">
+            
+            <!-- Customer Information -->
+            <div style="background: #e3f2fd; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+                <h4 style="margin: 0 0 15px 0; color: #1976d2;">👤 Customer Information</h4>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                    <div>
+                        <label style="display: block; margin-bottom: 8px; font-weight: bold;">Customer Name *</label>
+                        <input type="text" id="edit_name" name="customer_name" required style="width: 100%; padding: 12px; border: 2px solid #e9ecef; border-radius: 8px; box-sizing: border-box;">
+                    </div>
+                    <div>
+                        <label style="display: block; margin-bottom: 8px; font-weight: bold;">Email *</label>
+                        <input type="email" id="edit_email" name="customer_email" required style="width: 100%; padding: 12px; border: 2px solid #e9ecef; border-radius: 8px; box-sizing: border-box;">
+                    </div>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div>
+                        <label style="display: block; margin-bottom: 8px; font-weight: bold;">Phone *</label>
+                        <input type="tel" id="edit_phone" name="customer_phone" required style="width: 100%; padding: 12px; border: 2px solid #e9ecef; border-radius: 8px; box-sizing: border-box;">
+                    </div>
+                    <div>
+                        <label style="display: block; margin-bottom: 8px; font-weight: bold;">Party Size *</label>
+                        <select id="edit_party" name="party_size" required style="width: 100%; padding: 12px; border: 2px solid #e9ecef; border-radius: 8px; box-sizing: border-box;">
+                            <?php for($i = 1; $i <= 20; $i++): ?>
+                                <option value="<?php echo $i; ?>"><?php echo $i; ?> <?php echo $i == 1 ? 'Guest' : 'Guests'; ?></option>
+                            <?php endfor; ?>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Reservation Details -->
+            <div style="background: #e8f5e8; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+                <h4 style="margin: 0 0 15px 0; color: #155724;">📅 Reservation Details</h4>
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
+                    <div>
+                        <label style="display: block; margin-bottom: 8px; font-weight: bold;">Date *</label>
+                        <input type="date" id="edit_date" name="reservation_date" required style="width: 100%; padding: 12px; border: 2px solid #e9ecef; border-radius: 8px; box-sizing: border-box;">
+                    </div>
+                    <div>
+                        <label style="display: block; margin-bottom: 8px; font-weight: bold;">Time *</label>
+                        <input type="time" id="edit_time" name="reservation_time" required style="width: 100%; padding: 12px; border: 2px solid #e9ecef; border-radius: 8px; box-sizing: border-box;">
+                    </div>
+                    <div>
+                        <label style="display: block; margin-bottom: 8px; font-weight: bold;">🍽️ Table</label>
+                        <select id="edit_table" name="table_id" style="width: 100%; padding: 12px; border: 2px solid #e9ecef; border-radius: 8px; box-sizing: border-box;">
+                            <option value="">No Table</option>
+                            <?php 
+                            global $wpdb;
+                            $tables = $wpdb->get_results("SELECT * FROM {$wpdb->prefix}yrr_tables ORDER BY table_number");
+                            if ($tables) {
+                                foreach ($tables as $table): ?>
+                                    <option value="<?php echo $table->id; ?>">
+                                        <?php echo esc_html($table->table_number); ?> (<?php echo $table->capacity; ?> seats - <?php echo esc_html($table->location); ?>)
+                                    </option>
+                                <?php endforeach;
+                            }
+                            ?>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Additional Information -->
+            <div style="background: #fff3cd; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+                <h4 style="margin: 0 0 15px 0; color: #856404;">📝 Additional Information</h4>
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: bold;">Special Requests</label>
+                    <textarea id="edit_requests" name="special_requests" rows="3" style="width: 100%; padding: 12px; border: 2px solid #e9ecef; border-radius: 8px; box-sizing: border-box;"></textarea>
+                </div>
+                <div>
+                    <label style="display: block; margin-bottom: 8px; font-weight: bold;">Admin Notes</label>
+                    <textarea id="edit_notes" name="notes" rows="2" style="width: 100%; padding: 12px; border: 2px solid #e9ecef; border-radius: 8px; box-sizing: border-box;"></textarea>
+                </div>
+            </div>
+            
+            <!-- Action Buttons -->
+            <div style="text-align: right; padding-top: 20px; border-top: 2px solid #e9ecef;">
+                <button type="button" onclick="closeModal()" style="background: #6c757d; color: white; border: none; padding: 12px 24px; border-radius: 8px; margin-right: 15px; cursor: pointer; font-weight: bold;">Cancel</button>
+                <button type="submit" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: bold;">💾 Update Reservation</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function editReservation(res) {
+    document.getElementById('edit_id').value = res.id || '';
+    document.getElementById('edit_name').value = res.customer_name || '';
+    document.getElementById('edit_email').value = res.customer_email || '';
+    document.getElementById('edit_phone').value = res.customer_phone || '';
+    document.getElementById('edit_party').value = res.party_size || '1';
+    document.getElementById('edit_date').value = res.reservation_date || '';
+    
+    const time = res.reservation_time || '';
+    document.getElementById('edit_time').value = time.length > 5 ? time.substring(0, 5) : time;
+    
+    document.getElementById('edit_requests').value = res.special_requests || '';
+    document.getElementById('edit_notes').value = res.notes || '';
+    
+    if (res.table_id) {
+        document.getElementById('edit_table').value = res.table_id;
+    }
+    
+    document.getElementById('editModal').style.display = 'flex';
+}
+
+function closeModal() {
+    document.getElementById('editModal').style.display = 'none';
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const editModal = document.getElementById('editModal');
+    if (editModal) {
+        editModal.addEventListener('click', function(e) {
+            if (e.target === this) closeModal();
+        });
+    }
+});
+</script>

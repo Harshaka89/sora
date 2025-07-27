@@ -1,20 +1,31 @@
 <?php
 if (!defined('ABSPATH')) exit;
 
-// Get current date or requested date
 $current_date = isset($_GET['date']) ? sanitize_text_field($_GET['date']) : date('Y-m-d');
 
-// Get table schedule data
-$tables_model = new YRR_Tables_Model();
-$schedule = $tables_model->get_all_tables_schedule($current_date);
-$time_slots = $tables_model->get_time_slots(null, $current_date);
+// Get tables and bookings
+global $wpdb;
+$tables = $wpdb->get_results("SELECT * FROM {$wpdb->prefix}yrr_tables ORDER BY table_number");
+$bookings = $wpdb->get_results($wpdb->prepare(
+    "SELECT * FROM {$wpdb->prefix}yrr_reservations WHERE reservation_date = %s AND status IN ('confirmed', 'pending') ORDER BY reservation_time",
+    $current_date
+));
 
-function get_booking_color($status) {
-    switch ($status) {
-        case 'confirmed': return '#28a745';
-        case 'pending': return '#ffc107';
-        case 'cancelled': return '#dc3545';
-        default: return '#6c757d';
+// Organize bookings by table
+$table_bookings = array();
+foreach ($bookings as $booking) {
+    if (!isset($table_bookings[$booking->table_id])) {
+        $table_bookings[$booking->table_id] = array();
+    }
+    $table_bookings[$booking->table_id][] = $booking;
+}
+
+// Generate time slots (10 AM to 10 PM, 30-minute intervals)
+$time_slots = array();
+for ($hour = 10; $hour <= 22; $hour++) {
+    for ($minute = 0; $minute < 60; $minute += 30) {
+        if ($hour == 22 && $minute > 0) break;
+        $time_slots[] = sprintf('%02d:%02d', $hour, $minute);
     }
 }
 ?>
@@ -76,25 +87,13 @@ function get_booking_color($status) {
                         <th style="padding: 15px; text-align: left; font-weight: bold; min-width: 120px;">Table</th>
                         <?php foreach ($time_slots as $slot): ?>
                             <th style="padding: 10px 5px; text-align: center; font-weight: bold; min-width: 80px; font-size: 0.9rem;">
-                                <?php echo $slot['formatted_time']; ?>
+                                <?php echo date('g:i A', strtotime($slot)); ?>
                             </th>
                         <?php endforeach; ?>
                     </tr>
                 </thead>
                 <tbody>
-                    <?php foreach ($schedule as $table_data): ?>
-                        <?php 
-                        $table = $table_data['table'];
-                        $bookings = $table_data['bookings'];
-                        
-                        // Create booking lookup by time
-                        $booking_lookup = array();
-                        foreach ($bookings as $booking) {
-                            $booking_time = date('H:i', strtotime($booking->reservation_time));
-                            $booking_lookup[$booking_time] = $booking;
-                        }
-                        ?>
-                        
+                    <?php foreach ($tables as $table): ?>
                         <tr style="border-bottom: 1px solid #dee2e6;">
                             <!-- Table Info -->
                             <td style="padding: 15px; background: #f8f9fa; font-weight: bold; border-right: 2px solid #dee2e6;">
@@ -112,22 +111,36 @@ function get_booking_color($status) {
                             <!-- Time Slot Cells -->
                             <?php foreach ($time_slots as $slot): ?>
                                 <?php 
-                                $slot_time = $slot['time'];
-                                $has_booking = isset($booking_lookup[$slot_time]);
-                                $booking = $has_booking ? $booking_lookup[$slot_time] : null;
+                                $has_booking = false;
+                                $booking = null;
+                                
+                                if (isset($table_bookings[$table->id])) {
+                                    foreach ($table_bookings[$table->id] as $b) {
+                                        $booking_time = date('H:i', strtotime($b->reservation_time));
+                                        if ($booking_time === $slot) {
+                                            $has_booking = true;
+                                            $booking = $b;
+                                            break;
+                                        }
+                                    }
+                                }
+                                
+                                $color = $has_booking ? 
+                                    ($booking->status === 'confirmed' ? '#28a745' : '#ffc107') : 
+                                    '#f8f9fa';
                                 ?>
                                 
                                 <td style="padding: 5px; text-align: center; height: 60px; position: relative;">
                                     <?php if ($has_booking): ?>
                                         <!-- Booked Slot -->
                                         <div onclick="showBookingDetails(<?php echo htmlspecialchars(json_encode($booking)); ?>)"
-                                             style="background: <?php echo get_booking_color($booking->status); ?>; color: white; padding: 8px 4px; border-radius: 8px; cursor: pointer; font-size: 0.75rem; font-weight: bold; height: 100%; display: flex; flex-direction: column; justify-content: center;">
+                                             style="background: <?php echo $color; ?>; color: white; padding: 8px 4px; border-radius: 8px; cursor: pointer; font-size: 0.75rem; font-weight: bold; height: 100%; display: flex; flex-direction: column; justify-content: center;">
                                             <div style="margin-bottom: 2px;"><?php echo esc_html(substr($booking->customer_name, 0, 10)); ?></div>
                                             <div style="font-size: 0.7rem; opacity: 0.9;">👥 <?php echo intval($booking->party_size); ?></div>
                                         </div>
                                     <?php else: ?>
                                         <!-- Available Slot -->
-                                        <div onclick="quickBook('<?php echo $table->id; ?>', '<?php echo $current_date; ?>', '<?php echo $slot_time; ?>')"
+                                        <div onclick="quickBook('<?php echo $table->id; ?>', '<?php echo $current_date; ?>', '<?php echo $slot; ?>')"
                                              style="background: #f8f9fa; border: 2px dashed #dee2e6; padding: 8px 4px; border-radius: 8px; cursor: pointer; font-size: 0.7rem; color: #6c757d; height: 100%; display: flex; align-items: center; justify-content: center; transition: all 0.3s ease;">
                                             <span>🆓<br>Available</span>
                                         </div>
@@ -139,186 +152,20 @@ function get_booking_color($status) {
                 </tbody>
             </table>
         </div>
-        
-        <!-- Quick Stats -->
-        <div style="margin-top: 30px; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
-            <?php
-            $total_bookings = 0;
-            $confirmed_bookings = 0;
-            $pending_bookings = 0;
-            
-            foreach ($schedule as $table_data) {
-                foreach ($table_data['bookings'] as $booking) {
-                    $total_bookings++;
-                    if ($booking->status === 'confirmed') $confirmed_bookings++;
-                    if ($booking->status === 'pending') $pending_bookings++;
-                }
-            }
-            ?>
-            
-            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 10px; text-align: center;">
-                <div style="font-size: 2rem; font-weight: bold;"><?php echo count($schedule); ?></div>
-                <div>Total Tables</div>
-            </div>
-            
-            <div style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white; padding: 20px; border-radius: 10px; text-align: center;">
-                <div style="font-size: 2rem; font-weight: bold;"><?php echo $confirmed_bookings; ?></div>
-                <div>Confirmed Bookings</div>
-            </div>
-            
-            <div style="background: linear-gradient(135deg, #ffc107 0%, #e0a800 100%); color: white; padding: 20px; border-radius: 10px; text-align: center;">
-                <div style="font-size: 2rem; font-weight: bold;"><?php echo $pending_bookings; ?></div>
-                <div>Pending Bookings</div>
-            </div>
-            
-            <div style="background: linear-gradient(135deg, #17a2b8 0%, #138496 100%); color: white; padding: 20px; border-radius: 10px; text-align: center;">
-                <div style="font-size: 2rem; font-weight: bold;"><?php echo $total_bookings; ?></div>
-                <div>Total Bookings</div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Booking Details Modal -->
-<div id="bookingDetailsModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 10000; align-items: center; justify-content: center;">
-    <div style="background: white; padding: 30px; border-radius: 20px; width: 90%; max-width: 500px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #e9ecef;">
-            <h3 style="margin: 0;">📋 Booking Details</h3>
-            <button onclick="closeBookingModal()" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #6c757d;">×</button>
-        </div>
-        
-        <div id="bookingDetailsContent">
-            <!-- Content will be populated by JavaScript -->
-        </div>
-        
-        <div style="text-align: center; margin-top: 20px; padding-top: 15px; border-top: 2px solid #e9ecef;">
-            <button onclick="closeBookingModal()" style="background: #6c757d; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: bold;">Close</button>
-        </div>
-    </div>
-</div>
-
-<!-- Quick Book Modal -->
-<div id="quickBookModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 10000; align-items: center; justify-content: center;">
-    <div style="background: white; padding: 30px; border-radius: 20px; width: 90%; max-width: 500px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #e9ecef;">
-            <h3 style="margin: 0;">⚡ Quick Book Table</h3>
-            <button onclick="closeQuickBookModal()" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #6c757d;">×</button>
-        </div>
-        
-        <form method="post" action="<?php echo admin_url('admin.php?page=yenolx-reservations'); ?>">
-            <?php wp_nonce_field('create_manual_reservation', 'manual_reservation_nonce'); ?>
-            <input type="hidden" name="create_manual_reservation" value="1">
-            <input type="hidden" id="quick_table_id" name="table_id">
-            <input type="hidden" id="quick_date" name="reservation_date">
-            <input type="hidden" id="quick_time" name="reservation_time">
-            
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
-                <div>
-                    <label style="display: block; margin-bottom: 8px; font-weight: bold;">Customer Name *</label>
-                    <input type="text" name="customer_name" required style="width: 100%; padding: 10px; border: 2px solid #e9ecef; border-radius: 8px; box-sizing: border-box;">
-                </div>
-                <div>
-                    <label style="display: block; margin-bottom: 8px; font-weight: bold;">Party Size *</label>
-                    <select name="party_size" required style="width: 100%; padding: 10px; border: 2px solid #e9ecef; border-radius: 8px; box-sizing: border-box;">
-                        <?php for($i = 1; $i <= 12; $i++): ?>
-                            <option value="<?php echo $i; ?>"><?php echo $i; ?> <?php echo $i == 1 ? 'guest' : 'guests'; ?></option>
-                        <?php endfor; ?>
-                    </select>
-                </div>
-            </div>
-            
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
-                <div>
-                    <label style="display: block; margin-bottom: 8px; font-weight: bold;">Email *</label>
-                    <input type="email" name="customer_email" required style="width: 100%; padding: 10px; border: 2px solid #e9ecef; border-radius: 8px; box-sizing: border-box;">
-                </div>
-                <div>
-                    <label style="display: block; margin-bottom: 8px; font-weight: bold;">Phone *</label>
-                    <input type="tel" name="customer_phone" required style="width: 100%; padding: 10px; border: 2px solid #e9ecef; border-radius: 8px; box-sizing: border-box;">
-                </div>
-            </div>
-            
-            <div style="margin-bottom: 15px;">
-                <label style="display: block; margin-bottom: 8px; font-weight: bold;">Special Requests</label>
-                <textarea name="special_requests" rows="2" style="width: 100%; padding: 10px; border: 2px solid #e9ecef; border-radius: 8px; box-sizing: border-box;"></textarea>
-            </div>
-            
-            <div style="text-align: right; padding-top: 15px; border-top: 2px solid #e9ecef;">
-                <button type="button" onclick="closeQuickBookModal()" style="background: #6c757d; color: white; border: none; padding: 10px 20px; border-radius: 8px; margin-right: 10px; cursor: pointer; font-weight: bold;">Cancel</button>
-                <button type="submit" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: bold;">📅 Book Table</button>
-            </div>
-        </form>
     </div>
 </div>
 
 <script>
 function showBookingDetails(booking) {
-    const modal = document.getElementById('bookingDetailsModal');
-    const content = document.getElementById('bookingDetailsContent');
-    
-    const statusColors = {
-        'confirmed': '#28a745',
-        'pending': '#ffc107', 
-        'cancelled': '#dc3545'
-    };
-    
-    const statusColor = statusColors[booking.status] || '#6c757d';
-    
-    content.innerHTML = `
-        <div style="text-align: center; margin-bottom: 20px;">
-            <div style="background: ${statusColor}; color: white; padding: 10px 20px; border-radius: 20px; display: inline-block; font-weight: bold; text-transform: uppercase; margin-bottom: 15px;">
-                ${booking.status}
-            </div>
-        </div>
-        
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
-            <div><strong>Customer:</strong><br>${booking.customer_name}</div>
-            <div><strong>Party Size:</strong><br>👥 ${booking.party_size} guests</div>
-        </div>
-        
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
-            <div><strong>Date:</strong><br>${booking.reservation_date}</div>
-            <div><strong>Time:</strong><br>${booking.reservation_time}</div>
-        </div>
-        
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
-            <div><strong>Email:</strong><br>${booking.customer_email}</div>
-            <div><strong>Phone:</strong><br>${booking.customer_phone}</div>
-        </div>
-        
-        ${booking.special_requests ? `<div style="margin-bottom: 15px;"><strong>Special Requests:</strong><br>${booking.special_requests}</div>` : ''}
-        
-        <div style="text-align: center; margin-top: 20px;">
-            <a href="<?php echo admin_url('admin.php?page=yenolx-reservations'); ?>" style="background: #007cba; color: white; padding: 10px 20px; text-decoration: none; border-radius: 8px; font-weight: bold;">View All Reservations</a>
-        </div>
-    `;
-    
-    modal.style.display = 'flex';
-}
-
-function closeBookingModal() {
-    document.getElementById('bookingDetailsModal').style.display = 'none';
+    alert(`Customer: ${booking.customer_name}\nParty Size: ${booking.party_size} guests\nTime: ${booking.reservation_time}\nStatus: ${booking.status}\nPhone: ${booking.customer_phone}\nEmail: ${booking.customer_email}${booking.special_requests ? '\nSpecial Requests: ' + booking.special_requests : ''}`);
 }
 
 function quickBook(tableId, date, time) {
-    document.getElementById('quick_table_id').value = tableId;
-    document.getElementById('quick_date').value = date;
-    document.getElementById('quick_time').value = time;
-    document.getElementById('quickBookModal').style.display = 'flex';
+    if (confirm(`Create a new booking for Table ${tableId} at ${time} on ${date}?`)) {
+        const formattedTime = time + ':00';
+        window.location.href = `admin.php?page=yenolx-reservations&quick_book=1&table_id=${tableId}&date=${date}&time=${formattedTime}`;
+    }
 }
-
-function closeQuickBookModal() {
-    document.getElementById('quickBookModal').style.display = 'none';
-}
-
-// Close modals when clicking outside
-document.getElementById('bookingDetailsModal').addEventListener('click', function(e) {
-    if (e.target === this) closeBookingModal();
-});
-
-document.getElementById('quickBookModal').addEventListener('click', function(e) {
-    if (e.target === this) closeQuickBookModal();
-});
 
 // Hover effects for available slots
 document.addEventListener('DOMContentLoaded', function() {
