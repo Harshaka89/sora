@@ -1,9 +1,10 @@
 <?php
 /**
  * Plugin Name: Restaurant Reservation System MVC v1.4
- * Description: Complete restaurant reservation management with MVC architecture
+ * Description: Complete restaurant reservation management with proper MVC architecture
  * Version: 1.4.0
  * Author: Your Name
+ * Text Domain: restaurant-reservations
  */
 
 if (!defined('ABSPATH')) exit;
@@ -12,31 +13,65 @@ define('RRS_VERSION', '1.4.0');
 define('RRS_PLUGIN_PATH', plugin_dir_path(__FILE__));
 define('RRS_PLUGIN_URL', plugin_dir_url(__FILE__));
 
-// Simple check - if MVC files don't exist, use basic functionality
-if (!file_exists(RRS_PLUGIN_PATH . 'includes/class-database.php')) {
-    // Fallback to basic functionality if MVC files are missing
-    add_action('admin_menu', 'rrs_basic_menu');
+// Database fix function
+function rrs_ensure_database_structure() {
+    if (!is_admin() || wp_doing_ajax()) return;
     
-    function rrs_basic_menu() {
-        add_menu_page('Reservations', 'Reservations', 'manage_options', 'reservations', 'rrs_basic_dashboard', 'dashicons-calendar-alt', 26);
+    if (get_transient('rrs_db_check_done')) return;
+    
+    global $wpdb;
+    
+    // Check and create settings table
+    $settings_table = $wpdb->prefix . 'rrs_settings';
+    $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$settings_table'") == $settings_table;
+    
+    if (!$table_exists) {
+        $charset_collate = $wpdb->get_charset_collate();
+        $sql = "CREATE TABLE $settings_table (
+            id int(11) NOT NULL AUTO_INCREMENT,
+            setting_name varchar(100) NOT NULL,
+            setting_value longtext DEFAULT NULL,
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY setting_name (setting_name)
+        ) $charset_collate;";
+        
+        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+        dbDelta($sql);
     }
     
-    function rrs_basic_dashboard() {
-        echo '<div class="wrap"><h1>🔧 MVC Files Missing</h1><p>Please add the MVC component files to activate full functionality.</p></div>';
+    // Ensure reservations table has all columns
+    $reservations_table = $wpdb->prefix . 'rrs_reservations';
+    $res_table_exists = $wpdb->get_var("SHOW TABLES LIKE '$reservations_table'") == $reservations_table;
+    
+    if ($res_table_exists) {
+        $columns_to_add = array(
+            'table_number' => "ALTER TABLE $reservations_table ADD COLUMN table_number VARCHAR(20) DEFAULT ''",
+            'notes' => "ALTER TABLE $reservations_table ADD COLUMN notes TEXT DEFAULT NULL",
+            'updated_at' => "ALTER TABLE $reservations_table ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"
+        );
+        
+        foreach ($columns_to_add as $column => $sql) {
+            $column_exists = $wpdb->get_results("SHOW COLUMNS FROM $reservations_table LIKE '$column'");
+            if (empty($column_exists)) {
+                $wpdb->query($sql);
+            }
+        }
     }
-    return;
+    
+    set_transient('rrs_db_check_done', true, DAY_IN_SECONDS);
 }
+
+add_action('admin_init', 'rrs_ensure_database_structure', 1);
 
 // Autoloader for MVC classes
 spl_autoload_register('rrs_autoloader');
 
 function rrs_autoloader($class_name) {
-    if (strpos($class_name, 'RRS_') !== 0) {
-        return;
-    }
+    if (strpos($class_name, 'RRS_') !== 0) return;
     
     $class_file = str_replace('_', '-', strtolower(substr($class_name, 4)));
-    
     $directories = array('models/', 'controllers/', 'includes/');
     
     foreach ($directories as $directory) {
@@ -74,17 +109,13 @@ class RRS_Plugin {
     }
     
     private function define_hooks() {
-        // Activation hook
         register_activation_hook(__FILE__, array('RRS_Database', 'create_tables'));
         
-        // Admin hooks
         $this->loader->add_action('admin_menu', $this->controllers['admin'], 'add_admin_menu');
         $this->loader->add_action('admin_enqueue_scripts', $this->controllers['admin'], 'enqueue_admin_assets');
         
-        // Public hooks
         $this->loader->add_shortcode('restaurant_booking_form', $this->controllers['reservation'], 'display_booking_form');
         
-        // AJAX hooks
         $this->loader->add_action('wp_ajax_rrs_update_reservation', $this->controllers['reservation'], 'ajax_update_reservation');
         $this->loader->add_action('wp_ajax_rrs_delete_reservation', $this->controllers['reservation'], 'ajax_delete_reservation');
     }
@@ -94,69 +125,10 @@ class RRS_Plugin {
     }
 }
 
-// Initialize MVC system
 function rrs_init_mvc_system() {
     $rrs_plugin = new RRS_Plugin();
     $rrs_plugin->run();
 }
 
 add_action('plugins_loaded', 'rrs_init_mvc_system');
-
-
-
-
-function rrs_check_database_structure() {
-    if (!current_user_can('manage_options') || !isset($_GET['rrs_debug'])) {
-        return;
-    }
-    
-    global $wpdb;
-    
-    echo '<div style="background: white; padding: 20px; margin: 20px; border: 2px solid #007cba; border-radius: 10px;">';
-    echo '<h3>🔍 Database Structure Check</h3>';
-    
-    // Check if settings table exists
-    $table_name = $wpdb->prefix . 'rrs_settings';
-    $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_name'") == $table_name;
-    
-    echo '<p><strong>Settings Table Exists:</strong> ' . ($table_exists ? '✅ YES' : '❌ NO') . '</p>';
-    
-    if ($table_exists) {
-        // Show table structure
-        $columns = $wpdb->get_results("SHOW COLUMNS FROM $table_name");
-        echo '<p><strong>Table Columns:</strong></p><ul>';
-        foreach ($columns as $column) {
-            echo '<li>' . $column->Field . ' (' . $column->Type . ')</li>';
-        }
-        echo '</ul>';
-        
-        // Show current data
-        $settings = $wpdb->get_results("SELECT * FROM $table_name ORDER BY setting_name");
-        echo '<p><strong>Current Settings:</strong></p>';
-        if ($settings) {
-            echo '<table border="1" style="border-collapse: collapse; width: 100%;">';
-            echo '<tr><th>Setting Name</th><th>Setting Value</th><th>Updated At</th></tr>';
-            foreach ($settings as $setting) {
-                echo '<tr>';
-                echo '<td>' . esc_html($setting->setting_name) . '</td>';
-                echo '<td>' . esc_html($setting->setting_value) . '</td>';
-                echo '<td>' . esc_html($setting->updated_at ?? 'N/A') . '</td>';
-                echo '</tr>';
-            }
-            echo '</table>';
-        } else {
-            echo '<p>No settings found in database.</p>';
-        }
-    } else {
-        echo '<p style="color: red;">❌ Settings table does not exist! This is the problem.</p>';
-    }
-    
-    echo '</div>';
-}
-
-add_action('admin_notices', 'rrs_check_database_structure');
-
-
-
-
 ?>
