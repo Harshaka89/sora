@@ -1,7 +1,6 @@
 <?php
 /**
- * Admin Controller Class - MVC Pattern
- * Complete version with phone number support
+ * Admin Controller Class - Complete Error-Free Version
  */
 
 if (!defined('ABSPATH')) exit;
@@ -69,9 +68,9 @@ class RRS_Admin_Controller {
                 'party_size' => intval($_POST['party_size']),
                 'reservation_date' => sanitize_text_field($_POST['reservation_date']),
                 'reservation_time' => sanitize_text_field($_POST['reservation_time']),
-                'special_requests' => sanitize_textarea_field($_POST['special_requests']),
-                'table_number' => sanitize_text_field($_POST['table_number']),
-                'notes' => sanitize_textarea_field($_POST['notes'])
+                'special_requests' => sanitize_textarea_field($_POST['special_requests'] ?? ''),
+                'table_number' => sanitize_text_field($_POST['table_number'] ?? ''),
+                'notes' => sanitize_textarea_field($_POST['notes'] ?? '')
             );
             
             $result = $this->reservation_model->update($id, $update_data);
@@ -108,13 +107,11 @@ class RRS_Admin_Controller {
     }
     
     public function all_reservations_page() {
-        // Get filter parameters
         $search = isset($_GET['search']) ? sanitize_text_field($_GET['search']) : '';
         $status_filter = isset($_GET['status']) ? sanitize_text_field($_GET['status']) : '';
         $date_from = isset($_GET['date_from']) ? sanitize_text_field($_GET['date_from']) : '';
         $date_to = isset($_GET['date_to']) ? sanitize_text_field($_GET['date_to']) : '';
         
-        // Get filtered reservations
         $reservations = $this->reservation_model->get_filtered_reservations($search, $status_filter, $date_from, $date_to);
         
         $this->load_view('admin/all-reservations', array(
@@ -127,77 +124,78 @@ class RRS_Admin_Controller {
     }
     
     public function settings_page() {
-        // Handle form submission with the fixed method
+        // Handle form submission with fixed method
         if (isset($_POST['save_settings']) && wp_verify_nonce($_POST['settings_nonce'], 'rrs_settings_save')) {
             $this->save_settings_fixed();
         }
         
-        // Get current settings
         $settings = $this->settings_model->get_all();
         
-        // Load settings view
         $this->load_view('admin/settings', array('settings' => $settings));
     }
     
     /**
-     * FIXED SETTINGS SAVE METHOD - With Phone Number Support
+     * FIXED SETTINGS SAVE METHOD - Addresses Phone Number Issues
      */
     private function save_settings_fixed() {
         global $wpdb;
         
-        // Include phone number and address in settings to save
         $settings_to_save = array(
             'restaurant_open' => 'restaurant_open',
             'restaurant_name' => 'restaurant_name',
             'restaurant_email' => 'restaurant_email',
-            'restaurant_phone' => 'restaurant_phone', // Phone number support
-            'restaurant_address' => 'restaurant_address', // Address support
+            'restaurant_phone' => 'restaurant_phone', // Fixed phone support
+            'restaurant_address' => 'restaurant_address', // Fixed address support
             'max_party_size' => 'max_party_size'
         );
         
         $saved_count = 0;
+        $errors = array();
         $table_name = $wpdb->prefix . 'rrs_settings';
         
         foreach ($settings_to_save as $post_key => $setting_name) {
             if (isset($_POST[$post_key])) {
                 $value = sanitize_text_field($_POST[$post_key]);
                 
-                // Special validation for phone numbers
+                // Special validation for different field types
                 if ($post_key === 'restaurant_phone') {
-                    // Clean phone number - remove invalid characters but keep valid ones
                     $value = preg_replace('/[^0-9\+\-\(\)\s\.]/', '', $value);
                 }
                 
-                // Special validation for email
-                if ($post_key === 'restaurant_email' && !is_email($value)) {
-                    $value = get_option('admin_email'); // Fallback to admin email
+                if ($post_key === 'restaurant_email' && !empty($value) && !is_email($value)) {
+                    $errors[] = 'Invalid email format';
+                    continue;
                 }
                 
-                // Delete existing setting first, then insert new one
-                $wpdb->delete($table_name, array('setting_name' => $setting_name));
-                
-                $result = $wpdb->insert($table_name, array(
-                    'setting_name' => $setting_name,
-                    'setting_value' => $value,
-                    'created_at' => current_time('mysql'),
-                    'updated_at' => current_time('mysql')
-                ));
+                // Use REPLACE for reliable saving
+                $result = $wpdb->query($wpdb->prepare("
+                    REPLACE INTO $table_name (setting_name, setting_value, created_at, updated_at) 
+                    VALUES (%s, %s, %s, %s)
+                ", $setting_name, $value, current_time('mysql'), current_time('mysql')));
                 
                 if ($result !== false) {
                     $saved_count++;
+                } else {
+                    $errors[] = "Failed to save $post_key";
                 }
             }
         }
         
-        // Clear all caches to ensure fresh data
+        // Clear caches
         wp_cache_flush();
         delete_transient('rrs_settings_cache');
-        wp_cache_delete('rrs_all_settings', 'rrs');
         
-        // Redirect with success message
+        // Store results for feedback
+        update_option('rrs_save_result', array(
+            'saved_count' => $saved_count,
+            'errors' => $errors,
+            'timestamp' => current_time('mysql')
+        ));
+        
         $redirect_url = add_query_arg(array(
             'message' => 'saved',
-            'count' => $saved_count
+            'count' => $saved_count,
+            'error_count' => count($errors)
         ), admin_url('admin.php?page=res-settings'));
         
         wp_redirect($redirect_url);

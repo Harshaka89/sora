@@ -1,4 +1,8 @@
 <?php
+/**
+ * Database Management Class - Error-Free Version
+ */
+
 if (!defined('ABSPATH')) exit;
 
 class RRS_Database {
@@ -50,7 +54,9 @@ class RRS_Database {
             'restaurant_open' => '1',
             'max_party_size' => '12',
             'restaurant_name' => get_bloginfo('name'),
-            'restaurant_email' => get_option('admin_email')
+            'restaurant_email' => get_option('admin_email'),
+            'restaurant_phone' => '',
+            'restaurant_address' => ''
         );
         
         foreach ($default_settings as $name => $value) {
@@ -107,3 +113,4 @@ class RRS_Database {
         }
     }
 }
+?>

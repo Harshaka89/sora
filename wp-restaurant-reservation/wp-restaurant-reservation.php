@@ -7,13 +7,20 @@
  * Text Domain: restaurant-reservations
  */
 
+// Prevent duplicate execution
+if (defined('RRS_PLUGIN_LOADED')) {
+    return;
+}
+define('RRS_PLUGIN_LOADED', true);
+
 if (!defined('ABSPATH')) exit;
 
 define('RRS_VERSION', '1.4.0');
 define('RRS_PLUGIN_PATH', plugin_dir_path(__FILE__));
 define('RRS_PLUGIN_URL', plugin_dir_url(__FILE__));
+define('RRS_PLUGIN_BASENAME', plugin_basename(__FILE__));
 
-// Database fix function
+// Database structure verification and creation
 function rrs_ensure_database_structure() {
     if (!is_admin() || wp_doing_ajax()) return;
     
@@ -21,7 +28,7 @@ function rrs_ensure_database_structure() {
     
     global $wpdb;
     
-    // Check and create settings table
+    // Create/verify settings table
     $settings_table = $wpdb->prefix . 'rrs_settings';
     $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$settings_table'") == $settings_table;
     
@@ -39,13 +46,76 @@ function rrs_ensure_database_structure() {
         
         require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
         dbDelta($sql);
+        
+        // Insert default settings
+        $defaults = array(
+            array('restaurant_open', '1'),
+            array('max_party_size', '12'),
+            array('restaurant_name', get_bloginfo('name')),
+            array('restaurant_email', get_option('admin_email')),
+            array('restaurant_phone', ''),
+            array('restaurant_address', '')
+        );
+        
+        foreach ($defaults as $default) {
+            $wpdb->insert($settings_table, array(
+                'setting_name' => $default[0],
+                'setting_value' => $default[1]
+            ));
+        }
     }
     
-    // Ensure reservations table has all columns
+    // Create/verify reservations table
     $reservations_table = $wpdb->prefix . 'rrs_reservations';
     $res_table_exists = $wpdb->get_var("SHOW TABLES LIKE '$reservations_table'") == $reservations_table;
     
-    if ($res_table_exists) {
+    if (!$res_table_exists) {
+        $charset_collate = $wpdb->get_charset_collate();
+        $sql = "CREATE TABLE $reservations_table (
+            id int(11) NOT NULL AUTO_INCREMENT,
+            reservation_code varchar(20) NOT NULL DEFAULT '',
+            customer_name varchar(100) NOT NULL DEFAULT '',
+            customer_email varchar(100) NOT NULL DEFAULT '',
+            customer_phone varchar(20) NOT NULL DEFAULT '',
+            party_size int(11) NOT NULL DEFAULT 1,
+            reservation_date date NOT NULL,
+            reservation_time time NOT NULL,
+            special_requests text DEFAULT NULL,
+            status varchar(20) NOT NULL DEFAULT 'pending',
+            table_number varchar(20) DEFAULT '',
+            notes text DEFAULT NULL,
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY reservation_code (reservation_code),
+            INDEX idx_date (reservation_date),
+            INDEX idx_status (status)
+        ) $charset_collate;";
+        
+        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+        dbDelta($sql);
+        
+        // Insert sample data
+        $sample_data = array(
+            array(
+                'reservation_code' => 'RES-' . date('Ymd') . '-001',
+                'customer_name' => 'John Smith',
+                'customer_email' => 'john@example.com',
+                'customer_phone' => '123-456-7890',
+                'party_size' => 4,
+                'reservation_date' => date('Y-m-d'),
+                'reservation_time' => '19:00:00',
+                'special_requests' => 'Window table please',
+                'status' => 'confirmed',
+                'table_number' => 'T1'
+            )
+        );
+        
+        foreach ($sample_data as $reservation) {
+            $wpdb->insert($reservations_table, $reservation);
+        }
+    } else {
+        // Add missing columns if table exists but columns are missing
         $columns_to_add = array(
             'table_number' => "ALTER TABLE $reservations_table ADD COLUMN table_number VARCHAR(20) DEFAULT ''",
             'notes' => "ALTER TABLE $reservations_table ADD COLUMN notes TEXT DEFAULT NULL",

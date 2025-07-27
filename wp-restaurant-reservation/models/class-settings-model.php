@@ -1,6 +1,6 @@
 <?php
 /**
- * Settings Model Class - With Phone Number Support
+ * Settings Model Class - Complete Error-Free Version
  */
 
 if (!defined('ABSPATH')) exit;
@@ -25,14 +25,10 @@ class RRS_Settings_Model {
     }
     
     public function set($setting_name, $setting_value) {
-        $this->wpdb->delete($this->table_name, array('setting_name' => $setting_name));
-        
-        return $this->wpdb->insert($this->table_name, array(
-            'setting_name' => $setting_name,
-            'setting_value' => $setting_value,
-            'created_at' => current_time('mysql'),
-            'updated_at' => current_time('mysql')
-        ));
+        return $this->wpdb->query($this->wpdb->prepare("
+            REPLACE INTO {$this->table_name} (setting_name, setting_value, created_at, updated_at) 
+            VALUES (%s, %s, %s, %s)
+        ", $setting_name, $setting_value, current_time('mysql'), current_time('mysql')));
     }
     
     public function get_all() {
@@ -50,8 +46,8 @@ class RRS_Settings_Model {
             'max_party_size' => '12',
             'restaurant_name' => get_bloginfo('name'),
             'restaurant_email' => get_option('admin_email'),
-            'restaurant_phone' => '', // Added phone number support
-            'restaurant_address' => '', // Bonus: address field
+            'restaurant_phone' => '',
+            'restaurant_address' => '',
             'advance_booking_hours' => '2',
             'max_advance_days' => '60',
             'currency_symbol' => '$',
@@ -80,14 +76,19 @@ class RRS_Settings_Model {
         );
     }
     
-    // Get restaurant contact info
-    public function get_contact_info() {
-        return array(
-            'name' => $this->get('restaurant_name', get_bloginfo('name')),
-            'email' => $this->get('restaurant_email', get_option('admin_email')),
-            'phone' => $this->get('restaurant_phone', ''),
-            'address' => $this->get('restaurant_address', '')
-        );
+    public function validate_phone($phone) {
+        $cleaned = preg_replace('/[^0-9\+\-\(\)\s\.]/', '', trim($phone));
+        
+        if (empty($cleaned)) {
+            return '';
+        }
+        
+        $digits_only = preg_replace('/[^0-9]/', '', $cleaned);
+        if (strlen($digits_only) < 7 || strlen($digits_only) > 15) {
+            return false;
+        }
+        
+        return $cleaned;
     }
 }
 ?>
