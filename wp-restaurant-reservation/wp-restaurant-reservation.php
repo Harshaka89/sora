@@ -767,4 +767,17 @@ add_action('admin_init', 'yrr_create_reservations_table');
 }
 add_action('admin_notices', 'yrr_debug_manual_reservation');
 
+// AJAX handler for getting available tables
+add_action('wp_ajax_get_available_tables', 'yrr_get_available_tables_ajax');
+function yrr_get_available_tables_ajax() {
+    check_ajax_referer('yrr_ajax_nonce', 'nonce');
+    
+    global $wpdb;
+    $party_size = intval($_POST['party_size']);
+    
+    $tables = $wpdb->get_results("SELECT * FROM {$wpdb->prefix}yrr_tables WHERE capacity >= $party_size ORDER BY table_number");
+    
+    wp_send_json($tables);
+}
+
 ?>

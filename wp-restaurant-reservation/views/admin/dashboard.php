@@ -1,9 +1,12 @@
 <?php
 if (!defined('ABSPATH')) exit;
 
-// Helper function for safe property access
+// Helper function to safely get object properties
 function yrr_get_property_dash($object, $property, $default = '') {
-    return (property_exists($object, $property) && !empty($object->$property)) ? $object->$property : $default;
+    if (is_object($object) && property_exists($object, $property) && !empty($object->$property)) {
+        return $object->$property;
+    }
+    return $default;
 }
 
 // Check user permissions
@@ -14,7 +17,10 @@ $is_admin = $is_super_admin || in_array('yrr_admin', $current_user->roles);
 if (!$is_admin) {
     wp_die('You do not have sufficient permissions to access this page.');
 }
+
+// Your existing dashboard content continues here...
 ?>
+
 
 <div class="wrap">
     <div style="max-width: 1400px; margin: 20px auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.1);">
