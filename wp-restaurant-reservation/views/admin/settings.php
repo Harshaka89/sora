@@ -31,10 +31,13 @@ if (!defined('ABSPATH')) exit;
                     <strong>Restaurant:</strong> <?php echo esc_html($settings['restaurant_name'] ?? get_bloginfo('name')); ?>
                 </div>
                 <div>
-                    <strong>Max Party:</strong> <?php echo esc_html($settings['max_party_size'] ?? '12'); ?> guests
+                    <strong>Email:</strong> <?php echo esc_html($settings['restaurant_email'] ?? get_option('admin_email')); ?>
                 </div>
                 <div>
-                    <strong>Email:</strong> <?php echo esc_html($settings['restaurant_email'] ?? get_option('admin_email')); ?>
+                    <strong>Phone:</strong> <?php echo esc_html($settings['restaurant_phone'] ?? 'Not set'); ?>
+                </div>
+                <div>
+                    <strong>Max Party:</strong> <?php echo esc_html($settings['max_party_size'] ?? '12'); ?> guests
                 </div>
             </div>
         </div>
@@ -67,25 +70,47 @@ if (!defined('ABSPATH')) exit;
                     🏪 Restaurant Information
                 </h2>
                 
+                <!-- Restaurant Name -->
+                <div style="margin-bottom: 25px;">
+                    <label style="display: block; margin-bottom: 10px; font-weight: bold; font-size: 1.1rem; color: #2c3e50;">Restaurant Name *</label>
+                    <input type="text" name="restaurant_name" value="<?php echo esc_attr($settings['restaurant_name'] ?? get_bloginfo('name')); ?>" 
+                           style="width: 100%; padding: 15px; border: 3px solid #e9ecef; border-radius: 10px; font-size: 1.1rem; box-sizing: border-box;" required>
+                </div>
+                
+                <!-- Contact Information Grid -->
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 25px; margin-bottom: 25px;">
                     <div>
-                        <label style="display: block; margin-bottom: 10px; font-weight: bold; font-size: 1.1rem; color: #2c3e50;">Restaurant Name</label>
-                        <input type="text" name="restaurant_name" value="<?php echo esc_attr($settings['restaurant_name'] ?? get_bloginfo('name')); ?>" 
+                        <label style="display: block; margin-bottom: 10px; font-weight: bold; font-size: 1.1rem; color: #2c3e50;">📧 Contact Email *</label>
+                        <input type="email" name="restaurant_email" value="<?php echo esc_attr($settings['restaurant_email'] ?? get_option('admin_email')); ?>" 
                                style="width: 100%; padding: 15px; border: 3px solid #e9ecef; border-radius: 10px; font-size: 1.1rem; box-sizing: border-box;" required>
+                        <small style="color: #6c757d;">For reservation notifications</small>
                     </div>
                     
                     <div>
-                        <label style="display: block; margin-bottom: 10px; font-weight: bold; font-size: 1.1rem; color: #2c3e50;">Contact Email</label>
-                        <input type="email" name="restaurant_email" value="<?php echo esc_attr($settings['restaurant_email'] ?? get_option('admin_email')); ?>" 
-                               style="width: 100%; padding: 15px; border: 3px solid #e9ecef; border-radius: 10px; font-size: 1.1rem; box-sizing: border-box;" required>
+                        <label style="display: block; margin-bottom: 10px; font-weight: bold; font-size: 1.1rem; color: #2c3e50;">📞 Phone Number</label>
+                        <input type="tel" name="restaurant_phone" value="<?php echo esc_attr($settings['restaurant_phone'] ?? ''); ?>" 
+                               placeholder="+1 (123) 456-7890"
+                               style="width: 100%; padding: 15px; border: 3px solid #e9ecef; border-radius: 10px; font-size: 1.1rem; box-sizing: border-box;">
+                        <small style="color: #6c757d;">Customer contact number</small>
                     </div>
                 </div>
                 
+                <!-- Address Field -->
+                <div style="margin-bottom: 25px;">
+                    <label style="display: block; margin-bottom: 10px; font-weight: bold; font-size: 1.1rem; color: #2c3e50;">📍 Restaurant Address</label>
+                    <input type="text" name="restaurant_address" value="<?php echo esc_attr($settings['restaurant_address'] ?? ''); ?>" 
+                           placeholder="123 Main Street, City, State 12345"
+                           style="width: 100%; padding: 15px; border: 3px solid #e9ecef; border-radius: 10px; font-size: 1.1rem; box-sizing: border-box;">
+                    <small style="color: #6c757d;">Full restaurant address</small>
+                </div>
+                
+                <!-- Max Party Size -->
                 <div style="max-width: 300px;">
-                    <label style="display: block; margin-bottom: 10px; font-weight: bold; font-size: 1.1rem; color: #2c3e50;">Maximum Party Size</label>
+                    <label style="display: block; margin-bottom: 10px; font-weight: bold; font-size: 1.1rem; color: #2c3e50;">👥 Maximum Party Size *</label>
                     <input type="number" name="max_party_size" value="<?php echo esc_attr($settings['max_party_size'] ?? '12'); ?>" 
                            min="1" max="50" required
                            style="width: 100%; padding: 15px; border: 3px solid #e9ecef; border-radius: 10px; text-align: center; font-weight: bold; font-size: 1.3rem; box-sizing: border-box;">
+                    <small style="color: #6c757d;">Largest group you can serve</small>
                 </div>
             </div>
             
@@ -113,7 +138,8 @@ if (!defined('ABSPATH')) exit;
             <p style="margin: 5px 0; font-family: monospace;">
                 ✅ Settings Table: <?php echo $table_exists ? 'EXISTS' : 'MISSING'; ?><br>
                 📊 Settings Count: <?php echo $settings_count; ?><br>
-                🕒 Last Check: <?php echo date('Y-m-d H:i:s'); ?>
+                🕒 Last Check: <?php echo date('Y-m-d H:i:s'); ?><br>
+                📱 Phone Support: ENABLED
             </p>
         </div>
     </div>
@@ -124,9 +150,19 @@ if (!defined('ABSPATH')) exit;
     div[style*="grid-template-columns: 1fr 1fr"] {
         grid-template-columns: 1fr !important;
     }
+    div[style*="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr))"] {
+        grid-template-columns: 1fr 1fr !important;
+    }
 }
+
 button:hover {
     transform: translateY(-3px) !important;
     box-shadow: 0 8px 25px rgba(40,167,69,0.4) !important;
+}
+
+input:focus {
+    border-color: #667eea !important;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1) !important;
+    outline: none !important;
 }
 </style>

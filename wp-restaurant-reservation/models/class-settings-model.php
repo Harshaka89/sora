@@ -1,6 +1,6 @@
 <?php
 /**
- * Settings Model Class - Fixed Version
+ * Settings Model Class - With Phone Number Support
  */
 
 if (!defined('ABSPATH')) exit;
@@ -16,7 +16,6 @@ class RRS_Settings_Model {
     }
     
     public function get($setting_name, $default = '') {
-        // Force fresh data from database - no caching
         $value = $this->wpdb->get_var($this->wpdb->prepare(
             "SELECT setting_value FROM {$this->table_name} WHERE setting_name = %s",
             $setting_name
@@ -26,7 +25,6 @@ class RRS_Settings_Model {
     }
     
     public function set($setting_name, $setting_value) {
-        // Delete first, then insert to avoid conflicts
         $this->wpdb->delete($this->table_name, array('setting_name' => $setting_name));
         
         return $this->wpdb->insert($this->table_name, array(
@@ -38,7 +36,6 @@ class RRS_Settings_Model {
     }
     
     public function get_all() {
-        // Force fresh data - no caching
         $results = $this->wpdb->get_results("SELECT setting_name, setting_value FROM {$this->table_name}");
         
         $settings = array();
@@ -53,9 +50,12 @@ class RRS_Settings_Model {
             'max_party_size' => '12',
             'restaurant_name' => get_bloginfo('name'),
             'restaurant_email' => get_option('admin_email'),
-            'restaurant_phone' => '',
+            'restaurant_phone' => '', // Added phone number support
+            'restaurant_address' => '', // Bonus: address field
             'advance_booking_hours' => '2',
-            'max_advance_days' => '60'
+            'max_advance_days' => '60',
+            'currency_symbol' => '$',
+            'time_format' => '12hour'
         );
         
         return array_merge($defaults, $settings);
@@ -77,6 +77,16 @@ class RRS_Settings_Model {
             'open' => isset($parts[0]) ? trim($parts[0]) : '10:00',
             'close' => isset($parts[1]) ? trim($parts[1]) : '22:00',
             'full' => $hours
+        );
+    }
+    
+    // Get restaurant contact info
+    public function get_contact_info() {
+        return array(
+            'name' => $this->get('restaurant_name', get_bloginfo('name')),
+            'email' => $this->get('restaurant_email', get_option('admin_email')),
+            'phone' => $this->get('restaurant_phone', ''),
+            'address' => $this->get('restaurant_address', '')
         );
     }
 }

@@ -1,7 +1,7 @@
 <?php
 /**
  * Admin Controller Class - MVC Pattern
- * Complete fixed version with proper settings handling
+ * Complete version with phone number support
  */
 
 if (!defined('ABSPATH')) exit;
@@ -33,7 +33,7 @@ class RRS_Admin_Controller {
     }
     
     public function dashboard_page() {
-        // Handle actions
+        // Handle actions with proper nonce verification
         if (isset($_GET['action']) && isset($_GET['id']) && wp_verify_nonce($_GET['_wpnonce'], 'reservation_action')) {
             $id = intval($_GET['id']);
             $redirect_url = admin_url('admin.php?page=reservations');
@@ -43,10 +43,12 @@ class RRS_Admin_Controller {
                     $result = $this->reservation_model->update($id, array('status' => 'confirmed'));
                     $redirect_url = add_query_arg('message', $result ? 'confirmed' : 'error', $redirect_url);
                     break;
+                    
                 case 'cancel':
                     $result = $this->reservation_model->update($id, array('status' => 'cancelled'));
                     $redirect_url = add_query_arg('message', $result ? 'cancelled' : 'error', $redirect_url);
                     break;
+                    
                 case 'delete':
                     $result = $this->reservation_model->delete($id);
                     $redirect_url = add_query_arg('message', $result ? 'deleted' : 'error', $redirect_url);
@@ -57,7 +59,7 @@ class RRS_Admin_Controller {
             exit;
         }
         
-        // Handle edit form
+        // Handle edit form submission  
         if (isset($_POST['edit_reservation']) && wp_verify_nonce($_POST['edit_nonce'], 'edit_reservation')) {
             $id = intval($_POST['reservation_id']);
             $update_data = array(
@@ -77,11 +79,13 @@ class RRS_Admin_Controller {
             exit;
         }
         
+        // Get data for dashboard
         $statistics = $this->reservation_model->get_statistics();
         $today_reservations = $this->reservation_model->get_by_date(date('Y-m-d'));
         $restaurant_status = $this->settings_model->get('restaurant_open', '1');
         $restaurant_name = $this->settings_model->get('restaurant_name', get_bloginfo('name'));
         
+        // Load dashboard view
         $this->load_view('admin/dashboard', array(
             'statistics' => $statistics,
             'today_reservations' => $today_reservations,
@@ -104,11 +108,13 @@ class RRS_Admin_Controller {
     }
     
     public function all_reservations_page() {
+        // Get filter parameters
         $search = isset($_GET['search']) ? sanitize_text_field($_GET['search']) : '';
         $status_filter = isset($_GET['status']) ? sanitize_text_field($_GET['status']) : '';
         $date_from = isset($_GET['date_from']) ? sanitize_text_field($_GET['date_from']) : '';
         $date_to = isset($_GET['date_to']) ? sanitize_text_field($_GET['date_to']) : '';
         
+        // Get filtered reservations
         $reservations = $this->reservation_model->get_filtered_reservations($search, $status_filter, $date_from, $date_to);
         
         $this->load_view('admin/all-reservations', array(
@@ -121,23 +127,31 @@ class RRS_Admin_Controller {
     }
     
     public function settings_page() {
-        // Handle form submission with fixed database saving
+        // Handle form submission with the fixed method
         if (isset($_POST['save_settings']) && wp_verify_nonce($_POST['settings_nonce'], 'rrs_settings_save')) {
             $this->save_settings_fixed();
         }
         
+        // Get current settings
         $settings = $this->settings_model->get_all();
         
+        // Load settings view
         $this->load_view('admin/settings', array('settings' => $settings));
     }
     
+    /**
+     * FIXED SETTINGS SAVE METHOD - With Phone Number Support
+     */
     private function save_settings_fixed() {
         global $wpdb;
         
+        // Include phone number and address in settings to save
         $settings_to_save = array(
             'restaurant_open' => 'restaurant_open',
             'restaurant_name' => 'restaurant_name',
             'restaurant_email' => 'restaurant_email',
+            'restaurant_phone' => 'restaurant_phone', // Phone number support
+            'restaurant_address' => 'restaurant_address', // Address support
             'max_party_size' => 'max_party_size'
         );
         
@@ -147,6 +161,17 @@ class RRS_Admin_Controller {
         foreach ($settings_to_save as $post_key => $setting_name) {
             if (isset($_POST[$post_key])) {
                 $value = sanitize_text_field($_POST[$post_key]);
+                
+                // Special validation for phone numbers
+                if ($post_key === 'restaurant_phone') {
+                    // Clean phone number - remove invalid characters but keep valid ones
+                    $value = preg_replace('/[^0-9\+\-\(\)\s\.]/', '', $value);
+                }
+                
+                // Special validation for email
+                if ($post_key === 'restaurant_email' && !is_email($value)) {
+                    $value = get_option('admin_email'); // Fallback to admin email
+                }
                 
                 // Delete existing setting first, then insert new one
                 $wpdb->delete($table_name, array('setting_name' => $setting_name));
@@ -164,10 +189,12 @@ class RRS_Admin_Controller {
             }
         }
         
-        // Clear all caches
+        // Clear all caches to ensure fresh data
         wp_cache_flush();
         delete_transient('rrs_settings_cache');
+        wp_cache_delete('rrs_all_settings', 'rrs');
         
+        // Redirect with success message
         $redirect_url = add_query_arg(array(
             'message' => 'saved',
             'count' => $saved_count
