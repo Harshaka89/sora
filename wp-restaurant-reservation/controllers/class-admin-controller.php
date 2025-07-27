@@ -470,6 +470,152 @@ class YRR_Admin_Controller {
         }
     }
     
+    public function dashboard_page() {
+    $this->check_permissions('yrr_view_dashboard');
+    
+    // Handle manual reservation creation
+    if (isset($_POST['create_manual_reservation']) && wp_verify_nonce($_POST['manual_reservation_nonce'], 'create_manual_reservation')) {
+        $this->create_manual_reservation();
+    }
+    
+    // Handle edit form submission
+    if (isset($_POST['edit_reservation']) && wp_verify_nonce($_POST['edit_nonce'], 'edit_reservation')) {
+        $this->handle_edit_reservation();
+    }
+    
+    // ✅ NEW: Handle confirm with table assignment
+    if (isset($_POST['confirm_with_table_action']) && wp_verify_nonce($_POST['confirm_table_nonce'], 'confirm_with_table')) {
+        $this->handle_confirm_with_table();
+    }
+    
+    // Handle reservation actions
+    if (isset($_GET['action']) && isset($_GET['id']) && wp_verify_nonce($_GET['_wpnonce'], 'reservation_action')) {
+        $this->handle_reservation_actions();
+    }
+    
+    // Load dashboard data
+    $statistics = $this->reservation_model->get_statistics();
+    $today_reservations = $this->reservation_model->get_by_date(date('Y-m-d'));
+    $restaurant_status = $this->settings_model->get('restaurant_open', '1');
+    $restaurant_name = $this->settings_model->get('restaurant_name', get_bloginfo('name'));
+    
+    $this->load_view('admin/dashboard', array(
+        'statistics' => $statistics,
+        'today_reservations' => $today_reservations,
+        'restaurant_status' => $restaurant_status,
+        'restaurant_name' => $restaurant_name
+    ));
+}
+
+public function table_schedule_page() {
+    $this->check_permissions('yrr_manage_reservations');
+    
+    // ✅ NEW: Handle add customer to table
+    if (isset($_POST['add_customer_action']) && wp_verify_nonce($_POST['add_customer_nonce'], 'add_customer_to_table')) {
+        $this->handle_add_customer_to_table();
+    }
+    
+    $this->load_view('admin/table-schedule');
+}
+
+// ✅ NEW: Handle confirm with table assignment
+private function handle_confirm_with_table() {
+    $reservation_id = intval($_POST['reservation_id']);
+    $table_id = intval($_POST['table_id']);
+    
+    if (!$reservation_id || !$table_id) {
+        wp_redirect(add_query_arg('message', 'invalid_data', admin_url('admin.php?page=yenolx-reservations')));
+        exit;
+    }
+    
+    // Update reservation: confirm status and assign table
+    $update_data = array(
+        'status' => 'confirmed',
+        'table_id' => $table_id
+    );
+    
+    $result = $this->reservation_model->update($reservation_id, $update_data);
+    
+    if ($result !== false) {
+        // Send confirmation email
+        $reservation = $this->reservation_model->get_by_id($reservation_id);
+        if ($reservation) {
+            $this->send_confirmation_email($reservation, $table_id);
+        }
+        
+        wp_redirect(add_query_arg('message', 'confirmed_with_table', admin_url('admin.php?page=yenolx-reservations')));
+    } else {
+        wp_redirect(add_query_arg('message', 'confirm_failed', admin_url('admin.php?page=yenolx-reservations')));
+    }
+    exit;
+}
+
+// ✅ NEW: Handle add customer to table
+private function handle_add_customer_to_table() {
+    $required_fields = array('customer_name', 'customer_email', 'customer_phone', 'party_size', 'table_id', 'reservation_date', 'reservation_time');
+    
+    foreach ($required_fields as $field) {
+        if (empty($_POST[$field])) {
+            wp_redirect(add_query_arg('message', 'missing_fields', admin_url('admin.php?page=yrr-table-schedule')));
+            exit;
+        }
+    }
+    
+    // Generate reservation code
+    $reservation_code = 'TBL-' . date('Ymd') . '-' . str_pad(rand(1, 999), 3, '0', STR_PAD_LEFT);
+    
+    $reservation_data = array(
+        'reservation_code' => $reservation_code,
+        'customer_name' => sanitize_text_field($_POST['customer_name']),
+        'customer_email' => sanitize_email($_POST['customer_email']),
+        'customer_phone' => sanitize_text_field($_POST['customer_phone']),
+        'party_size' => intval($_POST['party_size']),
+        'table_id' => intval($_POST['table_id']),
+        'reservation_date' => sanitize_text_field($_POST['reservation_date']),
+        'reservation_time' => sanitize_text_field($_POST['reservation_time']),
+        'special_requests' => sanitize_textarea_field($_POST['special_requests'] ?? ''),
+        'status' => 'confirmed',
+        'notes' => 'Added directly to table from schedule view',
+        'original_price' => 0.00,
+        'final_price' => 0.00
+    );
+    
+    $result = $this->reservation_model->create($reservation_data);
+    
+    if ($result) {
+        // Send confirmation email
+        $this->send_confirmation_email((object)$reservation_data, $_POST['table_id']);
+        wp_redirect(add_query_arg('message', 'customer_added', admin_url('admin.php?page=yrr-table-schedule&date=' . $_POST['reservation_date'])));
+    } else {
+        wp_redirect(add_query_arg('message', 'add_failed', admin_url('admin.php?page=yrr-table-schedule')));
+    }
+    exit;
+}
+
+private function send_confirmation_email($reservation, $table_id = null) {
+    $table_info = '';
+    if ($table_id) {
+        global $wpdb;
+        $table = $wpdb->get_row($wpdb->prepare("SELECT table_number, location FROM {$wpdb->prefix}yrr_tables WHERE id = %d", $table_id));
+        if ($table) {
+            $table_info = "\nTable: {$table->table_number} ({$table->location})";
+        }
+    }
+    
+    $subject = 'Reservation Confirmed - ' . get_bloginfo('name');
+    $message = "Dear {$reservation->customer_name},\n\n";
+    $message .= "Your reservation has been CONFIRMED!\n\n";
+    $message .= "Details:\n";
+    $message .= "Date: {$reservation->reservation_date}\n";
+    $message .= "Time: {$reservation->reservation_time}\n";
+    $message .= "Party Size: {$reservation->party_size} guests{$table_info}\n";
+    $message .= "Confirmation Code: {$reservation->reservation_code}\n\n";
+    $message .= "We look forward to serving you!\n\n";
+    $message .= "Best regards,\n" . get_bloginfo('name');
+    
+    wp_mail($reservation->customer_email, $subject, $message);
+}
+
     private function load_view($view, $data = array()) {
         extract($data);
         $view_file = YRR_PLUGIN_PATH . 'views/' . $view . '.php';

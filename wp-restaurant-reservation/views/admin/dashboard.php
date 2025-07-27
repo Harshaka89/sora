@@ -601,94 +601,54 @@ button:hover, a[style*="background:"]:hover {
 </div>
 
 
-<!-- Enhanced Reservation Card with Table Assignment -->
-<div style="padding: 20px; border: 2px solid #e9ecef; border-radius: 10px; background: white; display: grid; grid-template-columns: auto 1fr auto auto; gap: 20px; align-items: center;">
-    
-    <!-- Status Badge -->
-    <div>
-        <?php 
-        $status = yrr_get_property_dash($reservation, 'status', 'pending');
-        $status_colors = array(
-            'confirmed' => '#28a745',
-            'pending' => '#ffc107',
-            'cancelled' => '#dc3545'
-        );
-        $text_color = $status === 'pending' ? '#000' : '#fff';
-        ?>
-        <span style="background: <?php echo $status_colors[$status] ?? '#6c757d'; ?>; color: <?php echo $text_color; ?>; padding: 10px 15px; border-radius: 20px; font-size: 0.9rem; font-weight: bold; text-transform: uppercase;">
-            <?php echo esc_html($status); ?>
-        </span>
-    </div>
-    
-    <!-- Customer Info -->
-    <div>
-        <div style="font-weight: bold; font-size: 1.2rem; color: #2c3e50; margin-bottom: 5px;">
-            👤 <?php echo esc_html(yrr_get_property_dash($reservation, 'customer_name', 'Unknown Customer')); ?>
-        </div>
-        <div style="color: #6c757d; font-size: 0.9rem; margin-bottom: 3px;">
-            📧 <?php echo esc_html(yrr_get_property_dash($reservation, 'customer_email', 'No email')); ?>
-        </div>
-        <div style="color: #6c757d; font-size: 0.9rem;">
-            📞 <?php echo esc_html(yrr_get_property_dash($reservation, 'customer_phone', 'No phone')); ?>
-        </div>
-    </div>
-    
-    <!-- Reservation Details with Table Assignment -->
-    <div style="text-align: center;">
-        <div style="font-weight: bold; font-size: 1.3rem; color: #007cba; margin-bottom: 5px;">
-            <?php echo date('g:i A', strtotime(yrr_get_property_dash($reservation, 'reservation_time', '00:00:00'))); ?>
-        </div>
-        <div style="background: #e3f2fd; color: #1976d2; padding: 5px 10px; border-radius: 10px; font-weight: bold; margin-bottom: 5px;">
-            👥 <?php echo intval(yrr_get_property_dash($reservation, 'party_size', 1)); ?> guests
+<!-- Confirm with Table Assignment Modal -->
+<div id="confirmTableModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 10000; align-items: center; justify-content: center;">
+    <div style="background: white; padding: 30px; border-radius: 20px; width: 90%; max-width: 700px; max-height: 90vh; overflow-y: auto;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; padding-bottom: 15px; border-bottom: 2px solid #e9ecef;">
+            <h3 style="margin: 0;">✅ Confirm Reservation & Assign Table</h3>
+            <button onclick="closeConfirmTableModal()" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #6c757d;">×</button>
         </div>
         
-        <!-- Table Assignment Display -->
-        <?php 
-        $table_id = yrr_get_property_dash($reservation, 'table_id');
-        if ($table_id): 
-            global $wpdb;
-            $table_info = $wpdb->get_row($wpdb->prepare(
-                "SELECT table_number, capacity, location FROM {$wpdb->prefix}yrr_tables WHERE id = %d",
-                $table_id
-            ));
-        ?>
-            <div style="background: #28a745; color: white; padding: 5px 10px; border-radius: 10px; font-size: 0.9rem; font-weight: bold; margin-bottom: 5px;">
-                🍽️ <?php echo $table_info ? esc_html($table_info->table_number) : 'Table ' . $table_id; ?>
-                <?php if ($table_info): ?>
-                    <br><small>(<?php echo $table_info->capacity; ?> seats - <?php echo esc_html($table_info->location); ?>)</small>
-                <?php endif; ?>
+        <!-- Customer Info Display -->
+        <div style="background: #e3f2fd; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+            <h4 style="margin: 0 0 15px 0; color: #1976d2;">👤 Customer Reservation Details</h4>
+            <div id="confirm_customer_info">
+                <!-- Will be populated by JavaScript -->
             </div>
-        <?php else: ?>
-            <div style="background: #dc3545; color: white; padding: 5px 10px; border-radius: 10px; font-size: 0.9rem; font-weight: bold; margin-bottom: 5px;">
-                ❌ No Table Assigned
+        </div>
+        
+        <form method="post" action="">
+            <?php wp_nonce_field('confirm_with_table', 'confirm_table_nonce'); ?>
+            <input type="hidden" id="confirm_reservation_id" name="reservation_id">
+            <input type="hidden" name="confirm_with_table_action" value="1">
+            
+            <!-- Available Tables Grid -->
+            <div style="margin-bottom: 20px;">
+                <h4 style="margin: 0 0 15px 0; color: #2c3e50;">🍽️ Select Table to Assign</h4>
+                <div id="confirm_tables_grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 15px; max-height: 300px; overflow-y: auto;">
+                    <!-- Will be populated by JavaScript -->
+                </div>
             </div>
-        <?php endif; ?>
-        
-        <!-- Quick Table Assignment Button -->
-        <button onclick="showTableAssignmentModal(<?php echo $reservation->id; ?>, '<?php echo esc_js($reservation->customer_name); ?>', <?php echo $reservation->party_size; ?>)" 
-                style="background: #17a2b8; color: white; border: none; padding: 5px 10px; border-radius: 5px; font-size: 0.8rem; cursor: pointer; font-weight: bold; margin-top: 5px;">
-            🍽️ <?php echo $table_id ? 'Change Table' : 'Assign Table'; ?>
-        </button>
-    </div>
-    
-    <!-- Actions -->
-    <div style="display: flex; gap: 8px; flex-direction: column;">
-        <?php $reservation_id = yrr_get_property_dash($reservation, 'id'); ?>
-        <?php if ($reservation_id && $status === 'pending'): ?>
-            <a href="<?php echo wp_nonce_url(admin_url('admin.php?page=yenolx-reservations&action=confirm&id=' . $reservation_id), 'reservation_action'); ?>" 
-               style="background: #28a745; color: white; padding: 8px 12px; text-decoration: none; border-radius: 5px; font-size: 0.8rem; font-weight: bold; text-align: center;">
-                ✅ Confirm
-            </a>
-        <?php endif; ?>
-        
-        <?php if ($reservation_id): ?>
-            <button onclick="editReservation(<?php echo htmlspecialchars(json_encode($reservation)); ?>)" 
-                    style="background: #ffc107; color: #000; border: none; padding: 8px 12px; border-radius: 5px; font-size: 0.8rem; font-weight: bold; cursor: pointer;">
-                ✏️ Edit
-            </button>
-        <?php endif; ?>
+            
+            <!-- Selected Table Display -->
+            <div id="confirm_selected_table" style="display: none; background: #e8f5e8; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
+                <h4 style="margin: 0 0 10px 0; color: #155724;">✅ Selected Table</h4>
+                <div id="confirm_selected_details">
+                    <!-- Will be populated by JavaScript -->
+                </div>
+            </div>
+            
+            <!-- Action Buttons -->
+            <div style="text-align: right; padding-top: 20px; border-top: 2px solid #e9ecef;">
+                <button type="button" onclick="closeConfirmTableModal()" style="background: #6c757d; color: white; border: none; padding: 12px 24px; border-radius: 8px; margin-right: 15px; cursor: pointer; font-weight: bold;">Cancel</button>
+                <button type="submit" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: bold;" disabled id="confirmTableButton">
+                    ✅ Confirm Reservation
+                </button>
+            </div>
+        </form>
     </div>
 </div>
+
 
 
 <!-- Table Assignment Modal -->
@@ -737,6 +697,111 @@ button:hover, a[style*="background:"]:hover {
 </div>
 
 
+<script>
+function showConfirmWithTableModal(reservationId, customerName, partySize, date, time) {
+    document.getElementById('confirm_reservation_id').value = reservationId;
+    
+    // Display customer info
+    document.getElementById('confirm_customer_info').innerHTML = `
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+            <div><strong>Customer:</strong><br>${customerName}</div>
+            <div><strong>Party Size:</strong><br>👥 ${partySize} guests</div>
+            <div><strong>Date:</strong><br>📅 ${date}</div>
+            <div><strong>Time:</strong><br>🕐 ${time}</div>
+        </div>
+    `;
+    
+    // Load available tables
+    loadTablesForConfirmation(partySize, date, time);
+    
+    document.getElementById('confirmTableModal').style.display = 'flex';
+}
+
+function closeConfirmTableModal() {
+    document.getElementById('confirmTableModal').style.display = 'none';
+    document.getElementById('confirm_selected_table').style.display = 'none';
+    document.getElementById('confirmTableButton').disabled = true;
+}
+
+function loadTablesForConfirmation(partySize, date, time) {
+    const tablesGrid = document.getElementById('confirm_tables_grid');
+    
+    // Show loading
+    tablesGrid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; padding: 20px; color: #007cba;">🔄 Loading available tables...</div>';
+    
+    // Load tables from PHP data
+    <?php
+    global $wpdb;
+    $all_tables = $wpdb->get_results("SELECT * FROM {$wpdb->prefix}yrr_tables ORDER BY table_number");
+    if ($all_tables):
+    ?>
+        const tables = <?php echo json_encode($all_tables); ?>;
+        displayTablesForConfirmation(tables, partySize);
+    <?php else: ?>
+        tablesGrid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; padding: 20px; color: #dc3545;">❌ No tables found</div>';
+    <?php endif; ?>
+}
+
+function displayTablesForConfirmation(tables, partySize) {
+    const tablesGrid = document.getElementById('confirm_tables_grid');
+    
+    let tablesHTML = '';
+    tables.forEach(table => {
+        const isSuitable = parseInt(table.capacity) >= parseInt(partySize);
+        const bgColor = isSuitable ? '#e8f5e8' : '#f8d7da';
+        const borderColor = isSuitable ? '#28a745' : '#dc3545';
+        const textColor = isSuitable ? '#155724' : '#721c24';
+        
+        tablesHTML += `
+            <div onclick="${isSuitable ? `selectTableForConfirmation(${table.id}, '${table.table_number}', ${table.capacity}, '${table.location}')` : ''}" 
+                 style="background: ${bgColor}; border: 2px solid ${borderColor}; padding: 15px; border-radius: 10px; text-align: center; cursor: ${isSuitable ? 'pointer' : 'not-allowed'}; color: ${textColor}; transition: all 0.3s ease;">
+                <div style="font-size: 2rem; margin-bottom: 8px;">🍽️</div>
+                <div style="font-weight: bold; margin-bottom: 5px;">${table.table_number}</div>
+                <div style="font-size: 0.9rem; margin-bottom: 3px;">${table.capacity} seats</div>
+                <div style="font-size: 0.8rem;">${table.location}</div>
+                ${!isSuitable ? '<div style="font-size: 0.8rem; margin-top: 5px; font-weight: bold;">Too Small</div>' : ''}
+            </div>
+        `;
+    });
+    
+    tablesGrid.innerHTML = tablesHTML;
+}
+
+function selectTableForConfirmation(tableId, tableName, capacity, location) {
+    // Remove existing selection
+    const existingInput = document.getElementById('confirm_selected_table_id');
+    if (existingInput) existingInput.remove();
+    
+    // Add hidden input
+    const hiddenInput = document.createElement('input');
+    hiddenInput.type = 'hidden';
+    hiddenInput.id = 'confirm_selected_table_id';
+    hiddenInput.name = 'table_id';
+    hiddenInput.value = tableId;
+    document.querySelector('#confirmTableModal form').appendChild(hiddenInput);
+    
+    // Show selected table info
+    document.getElementById('confirm_selected_details').innerHTML = `
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
+            <div><strong>Table:</strong><br>🍽️ ${tableName}</div>
+            <div><strong>Capacity:</strong><br>👥 ${capacity} seats</div>
+            <div><strong>Location:</strong><br>📍 ${location}</div>
+        </div>
+    `;
+    document.getElementById('confirm_selected_table').style.display = 'block';
+    
+    // Enable confirm button
+    document.getElementById('confirmTableButton').disabled = false;
+    
+    // Highlight selected table
+    document.querySelectorAll('#confirm_tables_grid > div').forEach(div => {
+        div.style.boxShadow = 'none';
+        div.style.transform = 'scale(1)';
+    });
+    event.currentTarget.style.boxShadow = '0 0 0 3px #007cba';
+    event.currentTarget.style.transform = 'scale(1.05)';
+}
+</script>
 
 
 

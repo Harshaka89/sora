@@ -1,152 +1,106 @@
 <?php
 /**
- * Reservation Controller - Yenolx Restaurant Reservation v1.5
+ * Reservation Controller - Yenolx Restaurant Reservation v1.5.1
+ * Fixed: Removed HTML content and syntax errors
  */
 
 if (!defined('ABSPATH')) exit;
 
 class YRR_Reservation_Controller {
     private $reservation_model;
-    private $tables_model;
-    private $pricing_model;
     
     public function __construct() {
         $this->reservation_model = new YRR_Reservation_Model();
-        $this->tables_model = new YRR_Tables_Model();
-        $this->pricing_model = new YRR_Pricing_Model();
+        
+        // Hook into WordPress actions
+        add_action('wp_ajax_submit_reservation', array($this, 'handle_ajax_reservation'));
+        add_action('wp_ajax_nopriv_submit_reservation', array($this, 'handle_ajax_reservation'));
+        add_action('init', array($this, 'handle_reservation_submission'));
     }
     
-    public function display_booking_form($atts) {
-        $atts = shortcode_atts(array(
-            'show_tables' => 'true',
-            'show_pricing' => 'true'
-        ), $atts);
-        
-        ob_start();
-        include YRR_PLUGIN_PATH . 'views/public/booking-form.php';
-        return ob_get_clean();
+    public function handle_reservation_submission() {
+        if (isset($_POST['submit_reservation']) && wp_verify_nonce($_POST['reservation_nonce'], 'submit_reservation')) {
+            $this->process_reservation();
+        }
     }
     
-    public function ajax_update_reservation() {
-        check_ajax_referer('yrr_ajax_nonce', 'nonce');
+    public function handle_ajax_reservation() {
+        check_ajax_referer('reservation_nonce', 'nonce');
         
-        if (!current_user_can('manage_options')) {
-            wp_die('Unauthorized');
+        $result = $this->process_reservation();
+        
+        if ($result) {
+            wp_send_json_success(array('message' => 'Reservation submitted successfully!'));
+        } else {
+            wp_send_json_error(array('message' => 'Failed to submit reservation. Please try again.'));
+        }
+    }
+    
+    private function process_reservation() {
+        // Validate required fields
+        $required_fields = array('customer_name', 'customer_email', 'customer_phone', 'party_size', 'reservation_date', 'reservation_time');
+        
+        foreach ($required_fields as $field) {
+            if (empty($_POST[$field])) {
+                return false;
+            }
         }
         
-        $id = intval($_POST['id']);
-        $data = array(
-            'status' => sanitize_text_field($_POST['status'])
+        // Prepare reservation data
+        $reservation_data = array(
+            'reservation_code' => $this->generate_reservation_code(),
+            'customer_name' => sanitize_text_field($_POST['customer_name']),
+            'customer_email' => sanitize_email($_POST['customer_email']),
+            'customer_phone' => sanitize_text_field($_POST['customer_phone']),
+            'party_size' => intval($_POST['party_size']),
+            'reservation_date' => sanitize_text_field($_POST['reservation_date']),
+            'reservation_time' => sanitize_text_field($_POST['reservation_time']),
+            'special_requests' => sanitize_textarea_field($_POST['special_requests'] ?? ''),
+            'status' => 'pending'
         );
         
-        $result = $this->reservation_model->update($id, $data);
+        // Create reservation
+        $result = $this->reservation_model->create($reservation_data);
         
-        wp_send_json_success(array(
-            'message' => 'Reservation updated successfully',
-            'result' => $result
-        ));
-    }
-    
-    public function ajax_delete_reservation() {
-        check_ajax_referer('yrr_ajax_nonce', 'nonce');
-        
-        if (!current_user_can('manage_options')) {
-            wp_die('Unauthorized');
+        if ($result) {
+            // Send confirmation email
+            $this->send_confirmation_email($reservation_data);
+            return $result;
         }
         
-        $id = intval($_POST['id']);
-        $result = $this->reservation_model->delete($id);
+        return false;
+    }
+    
+    private function generate_reservation_code() {
+        return 'RES-' . date('Ymd') . '-' . str_pad(rand(1, 999), 3, '0', STR_PAD_LEFT);
+    }
+    
+    private function send_confirmation_email($reservation_data) {
+        $subject = 'Reservation Confirmation - ' . get_bloginfo('name');
+        $message = "Dear {$reservation_data['customer_name']},\n\n";
+        $message .= "Your reservation has been received!\n\n";
+        $message .= "Details:\n";
+        $message .= "Date: {$reservation_data['reservation_date']}\n";
+        $message .= "Time: {$reservation_data['reservation_time']}\n";
+        $message .= "Party Size: {$reservation_data['party_size']} guests\n";
+        $message .= "Confirmation Code: {$reservation_data['reservation_code']}\n\n";
+        $message .= "We will confirm your reservation shortly.\n\n";
+        $message .= "Thank you!";
         
-        wp_send_json_success(array(
-            'message' => 'Reservation deleted successfully',
-            'result' => $result
-        ));
+        wp_mail($reservation_data['customer_email'], $subject, $message);
+    }
+    
+    public function display_reservation_form($atts = array()) {
+        $defaults = array(
+            'show_time_slots' => true,
+            'show_special_requests' => true
+        );
+        
+        $settings = wp_parse_args($atts, $defaults);
+        
+        ob_start();
+        include YRR_PLUGIN_PATH . 'views/public/reservation-form.php';
+        return ob_get_clean();
     }
 }
-
-<!-- Edit Reservation Modal -->
-<div id="editModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 10000; align-items: center; justify-content: center;">
-    <div style="background: white; padding: 30px; border-radius: 20px; width: 90%; max-width: 600px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-            <h3 style="margin: 0;">✏️ Edit Reservation</h3>
-            <button onclick="closeModal()" style="background: none; border: none; font-size: 24px; cursor: pointer;">×</button>
-        </div>
-        
-        <form method="post" action="">
-            <?php wp_nonce_field('edit_reservation', 'edit_nonce'); ?>
-            <input type="hidden" id="edit_id" name="reservation_id">
-            <input type="hidden" name="edit_reservation" value="1">
-            
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
-                <div>
-                    <label style="display: block; margin-bottom: 8px; font-weight: bold;">Customer Name *</label>
-                    <input type="text" id="edit_name" name="customer_name" required style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box;">
-                </div>
-                <div>
-                    <label style="display: block; margin-bottom: 8px; font-weight: bold;">Email *</label>
-                    <input type="email" id="edit_email" name="customer_email" required style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box;">
-                </div>
-            </div>
-            
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
-                <div>
-                    <label style="display: block; margin-bottom: 8px; font-weight: bold;">Phone *</label>
-                    <input type="tel" id="edit_phone" name="customer_phone" required style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box;">
-                </div>
-                <div>
-                    <label style="display: block; margin-bottom: 8px; font-weight: bold;">Party Size *</label>
-                    <select id="edit_party" name="party_size" required style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box;">
-                        <?php for($i = 1; $i <= 12; $i++): ?>
-                            <option value="<?php echo $i; ?>"><?php echo $i; ?> guests</option>
-                        <?php endfor; ?>
-                    </select>
-                </div>
-            </div>
-            
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
-                <div>
-                    <label style="display: block; margin-bottom: 8px; font-weight: bold;">Date *</label>
-                    <input type="date" id="edit_date" name="reservation_date" required style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box;">
-                </div>
-                <div>
-                    <label style="display: block; margin-bottom: 8px; font-weight: bold;">Time *</label>
-                    <input type="time" id="edit_time" name="reservation_time" required style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box;">
-                </div>
-            </div>
-            
-            <div style="margin-bottom: 15px;">
-                <label style="display: block; margin-bottom: 8px; font-weight: bold;">Special Requests</label>
-                <textarea id="edit_requests" name="special_requests" rows="3" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box;"></textarea>
-            </div>
-            
-            <div style="text-align: right;">
-                <button type="button" onclick="closeModal()" style="background: #666; color: white; border: none; padding: 10px 20px; border-radius: 5px; margin-right: 10px; cursor: pointer;">Cancel</button>
-                <button type="submit" style="background: #28a745; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer;">Update Reservation</button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<script>
-function editReservation(res) {
-    document.getElementById('edit_id').value = res.id || '';
-    document.getElementById('edit_name').value = res.customer_name || '';
-    document.getElementById('edit_email').value = res.customer_email || '';
-    document.getElementById('edit_phone').value = res.customer_phone || '';
-    document.getElementById('edit_party').value = res.party_size || '1';
-    document.getElementById('edit_date').value = res.reservation_date || '';
-    
-    const time = res.reservation_time || '';
-    document.getElementById('edit_time').value = time.length > 5 ? time.substring(0, 5) : time;
-    
-    document.getElementById('edit_requests').value = res.special_requests || '';
-    
-    document.getElementById('editModal').style.display = 'flex';
-}
-
-function closeModal() {
-    document.getElementById('editModal').style.display = 'none';
-}
-</script>
-
 ?>
