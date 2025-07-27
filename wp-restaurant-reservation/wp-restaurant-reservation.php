@@ -101,4 +101,62 @@ function rrs_init_mvc_system() {
 }
 
 add_action('plugins_loaded', 'rrs_init_mvc_system');
+
+
+
+
+function rrs_check_database_structure() {
+    if (!current_user_can('manage_options') || !isset($_GET['rrs_debug'])) {
+        return;
+    }
+    
+    global $wpdb;
+    
+    echo '<div style="background: white; padding: 20px; margin: 20px; border: 2px solid #007cba; border-radius: 10px;">';
+    echo '<h3>🔍 Database Structure Check</h3>';
+    
+    // Check if settings table exists
+    $table_name = $wpdb->prefix . 'rrs_settings';
+    $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_name'") == $table_name;
+    
+    echo '<p><strong>Settings Table Exists:</strong> ' . ($table_exists ? '✅ YES' : '❌ NO') . '</p>';
+    
+    if ($table_exists) {
+        // Show table structure
+        $columns = $wpdb->get_results("SHOW COLUMNS FROM $table_name");
+        echo '<p><strong>Table Columns:</strong></p><ul>';
+        foreach ($columns as $column) {
+            echo '<li>' . $column->Field . ' (' . $column->Type . ')</li>';
+        }
+        echo '</ul>';
+        
+        // Show current data
+        $settings = $wpdb->get_results("SELECT * FROM $table_name ORDER BY setting_name");
+        echo '<p><strong>Current Settings:</strong></p>';
+        if ($settings) {
+            echo '<table border="1" style="border-collapse: collapse; width: 100%;">';
+            echo '<tr><th>Setting Name</th><th>Setting Value</th><th>Updated At</th></tr>';
+            foreach ($settings as $setting) {
+                echo '<tr>';
+                echo '<td>' . esc_html($setting->setting_name) . '</td>';
+                echo '<td>' . esc_html($setting->setting_value) . '</td>';
+                echo '<td>' . esc_html($setting->updated_at ?? 'N/A') . '</td>';
+                echo '</tr>';
+            }
+            echo '</table>';
+        } else {
+            echo '<p>No settings found in database.</p>';
+        }
+    } else {
+        echo '<p style="color: red;">❌ Settings table does not exist! This is the problem.</p>';
+    }
+    
+    echo '</div>';
+}
+
+add_action('admin_notices', 'rrs_check_database_structure');
+
+
+
+
 ?>

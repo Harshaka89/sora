@@ -10,12 +10,35 @@ if (!defined('ABSPATH')) exit;
             <p style="color: #6c757d; margin: 15px 0 0 0; font-size: 1.1rem;">Complete operational configuration</p>
         </div>
         
-        <?php if (isset($_GET['message']) && $_GET['message'] == 'saved'): ?>
-            <div style="background: #d4edda; color: #155724; padding: 15px; margin: 20px 0; border-radius: 8px; border: 2px solid #28a745;">
-                <h3 style="margin: 0 0 10px 0;">✅ Settings Saved Successfully!</h3>
-                <p style="margin: 0;">All changes have been applied and saved to the database.</p>
-            </div>
-        <?php endif; ?>
+     <?php if (isset($_GET['message']) && $_GET['message'] == 'saved'): ?>
+    <div style="background: #d4edda; color: #155724; padding: 15px; margin: 20px 0; border-radius: 8px; border: 2px solid #28a745;">
+        <h3 style="margin: 0 0 10px 0;">✅ Settings Saved Successfully!</h3>
+        <p style="margin: 0;">All changes have been applied and saved to the database.</p>
+    </div>
+    
+    <!-- DEBUG INFORMATION -->
+    <?php 
+    $debug_info = get_option('rrs_debug_info');
+    if ($debug_info): ?>
+        <div style="background: #fff3cd; color: #856404; padding: 15px; margin: 20px 0; border-radius: 8px; border: 2px solid #ffc107;">
+            <h4 style="margin: 0 0 10px 0;">🔧 Debug Information</h4>
+            <p><strong>Saved Count:</strong> <?php echo $debug_info['saved_count']; ?></p>
+            <p><strong>Table Exists:</strong> <?php echo $debug_info['table_exists']; ?></p>
+            <p><strong>Timestamp:</strong> <?php echo $debug_info['timestamp']; ?></p>
+            <details>
+                <summary>Detailed Debug Info</summary>
+                <pre style="background: #f8f9fa; padding: 10px; border-radius: 5px; margin-top: 10px;">
+<?php print_r($debug_info['details']); ?>
+                </pre>
+            </details>
+        </div>
+        <?php 
+        // Clean up debug info after displaying
+        delete_option('rrs_debug_info');
+        ?>
+    <?php endif; ?>
+<?php endif; ?>
+
         
         <form method="post" action="">
             <?php wp_nonce_field('rrs_settings_save', 'settings_nonce'); ?>
