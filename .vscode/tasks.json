@@ -1,33 +1,45 @@
 {
-  "version": "2.0.0",
-  "tasks": [
-    {
-      "label": "Push Full Project to GitHub",
-      "type": "shell",
-      "command": "& { $date = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'; git pull; if ($?) { git add .; git commit -m ('Full project update ' + $date); git push } }",
-      "problemMatcher": [],
-      "group": {
-        "kind": "build",
-        "isDefault": true
-      },
-      "presentation": {
-        "reveal": "always",
-        "panel": "shared",
-        "clear": true
-      },
-      "options": {
-        "shell": {
-          "executable": "powershell.exe",
-          "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command"]
-        },
-        "statusbar": {
-          "hide": false
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Git: Sync and Push",
+            "type": "shell",
+            "command": "git",
+            "args": [
+                "pull",
+                "&&",
+                "git",
+                "add",
+                ".",
+                "&&",
+                "git",
+                "commit",
+                "-m",
+                "\"Update $(date /t) $(time /t)\"",
+                "&&",
+                "git",
+                "push"
+            ],
+            "problemMatcher": [],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": true
+            },
+            "options": {
+                "cwd": "${workspaceFolder}",
+                "shell": {
+                    "executable": "cmd.exe",
+                    "args": ["/d", "/c"]
+                }
+            }
         }
-      },
-      "runOptions": {
-        "runOn": "default"
-      },
-      "detail": "Syncs with remote, then pushes full project to GitHub"
-    }
-  ]
+    ]
 }
