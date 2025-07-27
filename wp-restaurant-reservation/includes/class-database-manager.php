@@ -1,161 +1,153 @@
 <?php
-class RRS_Database_Manager {
+/**
+ * Database Management - Yenolx Restaurant Reservation v1.5
+ */
+
+if (!defined('ABSPATH')) exit;
+
+class YRR_Database {
     
     public static function create_tables() {
         global $wpdb;
-        
         $charset_collate = $wpdb->get_charset_collate();
         
-        // Enhanced reservations table
-        $reservations_sql = "CREATE TABLE {$wpdb->prefix}rrs_reservations (
-            id int(11) NOT NULL AUTO_INCREMENT,
-            reservation_code varchar(20) UNIQUE NOT NULL,
-            customer_name varchar(100) NOT NULL,
-            customer_email varchar(100) NOT NULL,
-            customer_phone varchar(20) NOT NULL,
-            party_size int(11) NOT NULL,
-            reservation_date date NOT NULL,
-            reservation_time time NOT NULL,
-            special_requests text,
-            status varchar(20) DEFAULT 'pending',
-            gdpr_consent tinyint(1) DEFAULT 0,
-            created_at datetime DEFAULT CURRENT_TIMESTAMP,
-            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            PRIMARY KEY (id),
-            INDEX idx_date_time (reservation_date, reservation_time),
-            INDEX idx_status (status),
-            INDEX idx_customer_email (customer_email)
-        ) $charset_collate;";
-        
-        // Tables management
-        $tables_sql = "CREATE TABLE {$wpdb->prefix}rrs_tables (
-            id int(11) NOT NULL AUTO_INCREMENT,
-            name varchar(100) NOT NULL,
-            capacity_min int(11) NOT NULL DEFAULT 1,
-            capacity_max int(11) NOT NULL DEFAULT 8,
-            x_position int(11) DEFAULT 0,
-            y_position int(11) DEFAULT 0,
-            is_active tinyint(1) DEFAULT 1,
-            created_at datetime DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (id)
-        ) $charset_collate;";
-        
         // Settings table
-        $settings_sql = "CREATE TABLE {$wpdb->prefix}rrs_settings (
+        $settings_sql = "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}yrr_settings (
             id int(11) NOT NULL AUTO_INCREMENT,
             setting_name varchar(100) NOT NULL,
-            setting_value longtext,
+            setting_value longtext DEFAULT NULL,
             created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
             UNIQUE KEY setting_name (setting_name)
         ) $charset_collate;";
         
-        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+        // Reservations table
+        $reservations_sql = "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}yrr_reservations (
+            id int(11) NOT NULL AUTO_INCREMENT,
+            reservation_code varchar(20) NOT NULL DEFAULT '',
+            customer_name varchar(100) NOT NULL DEFAULT '',
+            customer_email varchar(100) NOT NULL DEFAULT '',
+            customer_phone varchar(20) NOT NULL DEFAULT '',
+            party_size int(11) NOT NULL DEFAULT 1,
+            reservation_date date NOT NULL,
+            reservation_time time NOT NULL,
+            special_requests text DEFAULT NULL,
+            status varchar(20) NOT NULL DEFAULT 'pending',
+            table_id int(11) DEFAULT NULL,
+            total_price decimal(10,2) DEFAULT 0.00,
+            price_breakdown text DEFAULT NULL,
+            notes text DEFAULT NULL,
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY reservation_code (reservation_code),
+            INDEX idx_date (reservation_date),
+            INDEX idx_status (status),
+            INDEX idx_table (table_id)
+        ) $charset_collate;";
         
+        // Tables management
+        $tables_sql = "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}yrr_tables (
+            id int(11) NOT NULL AUTO_INCREMENT,
+            table_number varchar(20) NOT NULL,
+            capacity int(11) NOT NULL,
+            status varchar(20) DEFAULT 'available',
+            location varchar(100) DEFAULT '',
+            table_type varchar(50) DEFAULT 'standard',
+            position_x int(11) DEFAULT 0,
+            position_y int(11) DEFAULT 0,
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY table_number (table_number)
+        ) $charset_collate;";
+        
+        // Operating hours
+        $hours_sql = "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}yrr_operating_hours (
+            id int(11) NOT NULL AUTO_INCREMENT,
+            day_of_week varchar(10) NOT NULL,
+            shift_name varchar(50) DEFAULT 'all_day',
+            open_time time DEFAULT NULL,
+            close_time time DEFAULT NULL,
+            is_closed boolean DEFAULT 0,
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY day_shift (day_of_week, shift_name)
+        ) $charset_collate;";
+        
+        // Pricing rules
+        $pricing_sql = "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}yrr_pricing_rules (
+            id int(11) NOT NULL AUTO_INCREMENT,
+            rule_name varchar(100) NOT NULL,
+            start_time time DEFAULT NULL,
+            end_time time DEFAULT NULL,
+            days_applicable varchar(20) DEFAULT 'all',
+            price_modifier decimal(10,2) DEFAULT 0.00,
+            modifier_type varchar(10) DEFAULT 'add',
+            is_active boolean DEFAULT 1,
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id)
+        ) $charset_collate;";
+        
+        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+        dbDelta($settings_sql);
         dbDelta($reservations_sql);
         dbDelta($tables_sql);
-        dbDelta($settings_sql);
+        dbDelta($hours_sql);
+        dbDelta($pricing_sql);
         
-        // Insert sample data
-        self::insert_sample_data();
+        self::insert_default_data();
     }
     
-    private static function insert_sample_data() {
+    private static function insert_default_data() {
         global $wpdb;
         
-        // Check if sample data already exists
-        $existing = $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}rrs_reservations");
+        // Insert default settings
+        $default_settings = array(
+            'restaurant_open' => '1',
+            'restaurant_name' => get_bloginfo('name'),
+            'restaurant_email' => get_option('admin_email'),
+            'restaurant_phone' => '',
+            'restaurant_address' => '',
+            'max_party_size' => '12',
+            'base_price_per_person' => '0.00',
+            'booking_time_slots' => '30',
+            'max_booking_advance_days' => '60'
+        );
         
-        if ($existing == 0) {
-            // Sample reservations
-            $sample_reservations = array(
-                array(
-                    'reservation_code' => 'RES-001',
-                    'customer_name' => 'John Smith',
-                    'customer_email' => 'john@example.com',
-                    'customer_phone' => '123-456-7890',
-                    'party_size' => 4,
-                    'reservation_date' => date('Y-m-d'),
-                    'reservation_time' => '19:00:00',
-                    'special_requests' => 'Window table please',
-                    'status' => 'confirmed',
-                    'gdpr_consent' => 1
-                ),
-                array(
-                    'reservation_code' => 'RES-002',
-                    'customer_name' => 'Sarah Johnson',
-                    'customer_email' => 'sarah@example.com',
-                    'customer_phone' => '987-654-3210',
-                    'party_size' => 2,
-                    'reservation_date' => date('Y-m-d'),
-                    'reservation_time' => '20:30:00',
-                    'special_requests' => 'Anniversary dinner',
-                    'status' => 'pending',
-                    'gdpr_consent' => 1
-                ),
-                array(
-                    'reservation_code' => 'RES-003',
-                    'customer_name' => 'Mike Wilson',
-                    'customer_email' => 'mike@example.com',
-                    'customer_phone' => '555-123-4567',
-                    'party_size' => 6,
-                    'reservation_date' => date('Y-m-d', strtotime('+1 day')),
-                    'reservation_time' => '18:30:00',
-                    'special_requests' => 'Birthday celebration',
-                    'status' => 'confirmed',
-                    'gdpr_consent' => 1
-                )
+        foreach ($default_settings as $name => $value) {
+            $wpdb->replace($wpdb->prefix . 'yrr_settings', array(
+                'setting_name' => $name,
+                'setting_value' => $value
+            ));
+        }
+        
+        // Insert default tables if none exist
+        $existing_tables = $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}yrr_tables");
+        if ($existing_tables == 0) {
+            $default_tables = array(
+                array('table_number' => 'T1', 'capacity' => 2, 'location' => 'Window'),
+                array('table_number' => 'T2', 'capacity' => 4, 'location' => 'Center'),
+                array('table_number' => 'T3', 'capacity' => 6, 'location' => 'Private'),
+                array('table_number' => 'T4', 'capacity' => 8, 'location' => 'VIP')
             );
             
-            foreach ($sample_reservations as $reservation) {
-                $wpdb->insert($wpdb->prefix . 'rrs_reservations', $reservation);
+            foreach ($default_tables as $table) {
+                $wpdb->insert($wpdb->prefix . 'yrr_tables', $table);
             }
-            
-            // Sample tables
-            $sample_tables = array(
-                array('name' => 'Table 1', 'capacity_min' => 2, 'capacity_max' => 4),
-                array('name' => 'Table 2', 'capacity_min' => 2, 'capacity_max' => 4),
-                array('name' => 'Table 3', 'capacity_min' => 4, 'capacity_max' => 6),
-                array('name' => 'Table 4', 'capacity_min' => 6, 'capacity_max' => 8),
-                array('name' => 'Table 5', 'capacity_min' => 2, 'capacity_max' => 4),
-                array('name' => 'Table 6', 'capacity_min' => 8, 'capacity_max' => 12)
-            );
-            
-            foreach ($sample_tables as $table) {
-                $wpdb->insert($wpdb->prefix . 'rrs_tables', $table);
-            }
-            
-            // Default settings
-            $default_settings = array(
-                'opening_hours' => json_encode(array(
-                    'monday' => array('open' => '10:00', 'close' => '22:00'),
-                    'tuesday' => array('open' => '10:00', 'close' => '22:00'),
-                    'wednesday' => array('open' => '10:00', 'close' => '22:00'),
-                    'thursday' => array('open' => '10:00', 'close' => '22:00'),
-                    'friday' => array('open' => '10:00', 'close' => '23:00'),
-                    'saturday' => array('open' => '09:00', 'close' => '23:00'),
-                    'sunday' => array('open' => '09:00', 'close' => '21:00')
-                )),
-                'booking_rules' => json_encode(array(
-                    'max_party_size' => 12,
-                    'min_advance_booking' => 2,
-                    'max_advance_booking' => 60,
-                    'slot_interval' => 30
-                )),
-                'email_settings' => json_encode(array(
-                    'admin_email' => get_option('admin_email'),
-                    'sender_name' => get_bloginfo('name'),
-                    'send_confirmations' => true,
-                    'send_reminders' => true
-                ))
-            );
-            
-            foreach ($default_settings as $name => $value) {
-                $wpdb->insert($wpdb->prefix . 'rrs_settings', array(
-                    'setting_name' => $name,
-                    'setting_value' => $value
-                ));
-            }
+        }
+        
+        // Insert default operating hours
+        $days = array('monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday');
+        foreach ($days as $day) {
+            $wpdb->replace($wpdb->prefix . 'yrr_operating_hours', array(
+                'day_of_week' => $day,
+                'shift_name' => 'all_day',
+                'open_time' => '10:00:00',
+                'close_time' => '22:00:00',
+                'is_closed' => 0
+            ));
         }
     }
 }
+?>

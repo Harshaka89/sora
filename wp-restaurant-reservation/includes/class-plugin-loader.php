@@ -1,38 +1,11 @@
 <?php
 /**
- * Plugin Loader Class
- * 
- * Manages WordPress hooks, filters, and plugin initialization
- * 
- * @package RestaurantReservations
- * @subpackage Includes
- * @version 1.4.0
- * @since 1.0.0
- * @author Your Name
- * 
- * @class RRS_Plugin_Loader
- * @description Core plugin loader and hook management system
- * 
- * Responsibilities:
- * - WordPress hook registration
- * - Filter management
- * - Shortcode registration
- * - AJAX action handling
- * - Plugin lifecycle management
- * 
- * Methods:
- * - add_action() - Register WordPress actions
- * - add_filter() - Register WordPress filters
- * - add_shortcode() - Register shortcodes
- * - add_ajax_action() - Register AJAX handlers
- * - run() - Execute all registered hooks
+ * Plugin Loader - Yenolx Restaurant Reservation v1.5
  */
 
 if (!defined('ABSPATH')) exit;
 
-
-class RRS_Plugin_Loader {
-    
+class YRR_Plugin_Loader {
     protected $actions;
     protected $filters;
     protected $shortcodes;
@@ -59,27 +32,31 @@ class RRS_Plugin_Loader {
     }
     
     private function add($hooks, $hook, $component, $callback, $priority, $accepted_args) {
-        $hooks[] = array(
-            'hook' => $hook,
+        $hooks[$hook][] = array(
             'component' => $component,
             'callback' => $callback,
             'priority' => $priority,
             'accepted_args' => $accepted_args
         );
+        
         return $hooks;
     }
     
     public function run() {
-        foreach ($this->filters as $hook) {
-            add_filter($hook['hook'], array($hook['component'], $hook['callback']), $hook['priority'], $hook['accepted_args']);
+        foreach ($this->filters as $hook => $callbacks) {
+            foreach ($callbacks as $callback) {
+                add_filter($hook, array($callback['component'], $callback['callback']), $callback['priority'], $callback['accepted_args']);
+            }
         }
         
-        foreach ($this->actions as $hook) {
-            add_action($hook['hook'], array($hook['component'], $hook['callback']), $hook['priority'], $hook['accepted_args']);
+        foreach ($this->actions as $hook => $callbacks) {
+            foreach ($callbacks as $callback) {
+                add_action($hook, array($callback['component'], $callback['callback']), $callback['priority'], $callback['accepted_args']);
+            }
         }
         
-        foreach ($this->shortcodes as $tag => $shortcode) {
-            add_shortcode($tag, array($shortcode['component'], $shortcode['callback']));
+        foreach ($this->shortcodes as $tag => $callback) {
+            add_shortcode($tag, array($callback['component'], $callback['callback']));
         }
     }
 }
