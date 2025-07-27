@@ -594,7 +594,153 @@ button:hover, a[style*="background:"]:hover {
     </div>
 </div>
 
+
+<!-- Enhanced Reservation Card with Table Assignment -->
+<div style="padding: 20px; border: 2px solid #e9ecef; border-radius: 10px; background: white; display: grid; grid-template-columns: auto 1fr auto auto; gap: 20px; align-items: center;">
+    
+    <!-- Status Badge -->
+    <div>
+        <?php 
+        $status = yrr_get_property_dash($reservation, 'status', 'pending');
+        $status_colors = array(
+            'confirmed' => '#28a745',
+            'pending' => '#ffc107',
+            'cancelled' => '#dc3545'
+        );
+        $text_color = $status === 'pending' ? '#000' : '#fff';
+        ?>
+        <span style="background: <?php echo $status_colors[$status] ?? '#6c757d'; ?>; color: <?php echo $text_color; ?>; padding: 10px 15px; border-radius: 20px; font-size: 0.9rem; font-weight: bold; text-transform: uppercase;">
+            <?php echo esc_html($status); ?>
+        </span>
+    </div>
+    
+    <!-- Customer Info -->
+    <div>
+        <div style="font-weight: bold; font-size: 1.2rem; color: #2c3e50; margin-bottom: 5px;">
+            👤 <?php echo esc_html(yrr_get_property_dash($reservation, 'customer_name', 'Unknown Customer')); ?>
+        </div>
+        <div style="color: #6c757d; font-size: 0.9rem; margin-bottom: 3px;">
+            📧 <?php echo esc_html(yrr_get_property_dash($reservation, 'customer_email', 'No email')); ?>
+        </div>
+        <div style="color: #6c757d; font-size: 0.9rem;">
+            📞 <?php echo esc_html(yrr_get_property_dash($reservation, 'customer_phone', 'No phone')); ?>
+        </div>
+    </div>
+    
+    <!-- Reservation Details with Table Assignment -->
+    <div style="text-align: center;">
+        <div style="font-weight: bold; font-size: 1.3rem; color: #007cba; margin-bottom: 5px;">
+            <?php echo date('g:i A', strtotime(yrr_get_property_dash($reservation, 'reservation_time', '00:00:00'))); ?>
+        </div>
+        <div style="background: #e3f2fd; color: #1976d2; padding: 5px 10px; border-radius: 10px; font-weight: bold; margin-bottom: 5px;">
+            👥 <?php echo intval(yrr_get_property_dash($reservation, 'party_size', 1)); ?> guests
+        </div>
+        
+        <!-- Table Assignment Display -->
+        <?php 
+        $table_id = yrr_get_property_dash($reservation, 'table_id');
+        if ($table_id): 
+            global $wpdb;
+            $table_info = $wpdb->get_row($wpdb->prepare(
+                "SELECT table_number, capacity, location FROM {$wpdb->prefix}yrr_tables WHERE id = %d",
+                $table_id
+            ));
+        ?>
+            <div style="background: #28a745; color: white; padding: 5px 10px; border-radius: 10px; font-size: 0.9rem; font-weight: bold; margin-bottom: 5px;">
+                🍽️ <?php echo $table_info ? esc_html($table_info->table_number) : 'Table ' . $table_id; ?>
+                <?php if ($table_info): ?>
+                    <br><small>(<?php echo $table_info->capacity; ?> seats - <?php echo esc_html($table_info->location); ?>)</small>
+                <?php endif; ?>
+            </div>
+        <?php else: ?>
+            <div style="background: #dc3545; color: white; padding: 5px 10px; border-radius: 10px; font-size: 0.9rem; font-weight: bold; margin-bottom: 5px;">
+                ❌ No Table Assigned
+            </div>
+        <?php endif; ?>
+        
+        <!-- Quick Table Assignment Button -->
+        <button onclick="showTableAssignmentModal(<?php echo $reservation->id; ?>, '<?php echo esc_js($reservation->customer_name); ?>', <?php echo $reservation->party_size; ?>)" 
+                style="background: #17a2b8; color: white; border: none; padding: 5px 10px; border-radius: 5px; font-size: 0.8rem; cursor: pointer; font-weight: bold; margin-top: 5px;">
+            🍽️ <?php echo $table_id ? 'Change Table' : 'Assign Table'; ?>
+        </button>
+    </div>
+    
+    <!-- Actions -->
+    <div style="display: flex; gap: 8px; flex-direction: column;">
+        <?php $reservation_id = yrr_get_property_dash($reservation, 'id'); ?>
+        <?php if ($reservation_id && $status === 'pending'): ?>
+            <a href="<?php echo wp_nonce_url(admin_url('admin.php?page=yenolx-reservations&action=confirm&id=' . $reservation_id), 'reservation_action'); ?>" 
+               style="background: #28a745; color: white; padding: 8px 12px; text-decoration: none; border-radius: 5px; font-size: 0.8rem; font-weight: bold; text-align: center;">
+                ✅ Confirm
+            </a>
+        <?php endif; ?>
+        
+        <?php if ($reservation_id): ?>
+            <button onclick="editReservation(<?php echo htmlspecialchars(json_encode($reservation)); ?>)" 
+                    style="background: #ffc107; color: #000; border: none; padding: 8px 12px; border-radius: 5px; font-size: 0.8rem; font-weight: bold; cursor: pointer;">
+                ✏️ Edit
+            </button>
+        <?php endif; ?>
+    </div>
+</div>
+
+
+<!-- Table Assignment Modal -->
+<div id="tableAssignmentModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 10000; align-items: center; justify-content: center;">
+    <div style="background: white; padding: 30px; border-radius: 20px; width: 90%; max-width: 600px; max-height: 90vh; overflow-y: auto;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; padding-bottom: 15px; border-bottom: 2px solid #e9ecef;">
+            <h3 style="margin: 0;">🍽️ Assign Table to Reservation</h3>
+            <button onclick="closeTableAssignmentModal()" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #6c757d;">×</button>
+        </div>
+        
+        <!-- Customer Info Display -->
+        <div style="background: #e3f2fd; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
+            <h4 style="margin: 0 0 10px 0; color: #1976d2;">👤 Customer Details</h4>
+            <div id="assignment_customer_info">
+                <!-- Will be populated by JavaScript -->
+            </div>
+        </div>
+        
+        <form method="post" action="">
+            <?php wp_nonce_field('assign_table', 'assign_table_nonce'); ?>
+            <input type="hidden" id="assign_reservation_id" name="reservation_id">
+            <input type="hidden" name="assign_table_action" value="1">
+            
+            <!-- Available Tables -->
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 8px; font-weight: bold; color: #2c3e50;">🍽️ Select Table</label>
+                <div id="available_tables_grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px;">
+                    <!-- Will be populated by JavaScript -->
+                </div>
+            </div>
+            
+            <!-- Selected Table Display -->
+            <div id="selected_table_info" style="display: none; background: #e8f5e8; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
+                <h4 style="margin: 0 0 10px 0; color: #155724;">✅ Selected Table</h4>
+                <div id="selected_table_details">
+                    <!-- Will be populated by JavaScript -->
+                </div>
+            </div>
+            
+            <div style="text-align: right; padding-top: 20px; border-top: 2px solid #e9ecef;">
+                <button type="button" onclick="closeTableAssignmentModal()" style="background: #6c757d; color: white; border: none; padding: 12px 24px; border-radius: 8px; margin-right: 15px; cursor: pointer; font-weight: bold;">Cancel</button>
+                <button type="submit" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: bold;">🍽️ Assign Table</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+
+
+
+
 <script>
+
+
+
+
+
+
 function editReservation(res) {
     document.getElementById('edit_id').value = res.id || '';
     document.getElementById('edit_name').value = res.customer_name || '';

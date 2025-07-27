@@ -90,7 +90,7 @@ public function table_schedule_page() {
 }
 
     
-   public function dashboard_page() {
+public function dashboard_page() {
     $this->check_permissions('yrr_view_dashboard');
     
     // Handle manual reservation creation
@@ -98,9 +98,14 @@ public function table_schedule_page() {
         $this->create_manual_reservation();
     }
     
-    // ✅ NEW: Handle edit form submission
+    // Handle edit form submission
     if (isset($_POST['edit_reservation']) && wp_verify_nonce($_POST['edit_nonce'], 'edit_reservation')) {
         $this->handle_edit_reservation();
+    }
+    
+    // ✅ NEW: Handle table assignment
+    if (isset($_POST['assign_table_action']) && wp_verify_nonce($_POST['assign_table_nonce'], 'assign_table')) {
+        $this->handle_table_assignment();
     }
     
     // Handle reservation actions
@@ -121,6 +126,55 @@ public function table_schedule_page() {
         'restaurant_name' => $restaurant_name
     ));
 }
+
+// ✅ NEW: Handle table assignment
+private function handle_table_assignment() {
+    $reservation_id = intval($_POST['reservation_id']);
+    $table_id = intval($_POST['table_id']);
+    
+    if (!$reservation_id) {
+        wp_redirect(add_query_arg('message', 'invalid_reservation', admin_url('admin.php?page=yenolx-reservations')));
+        exit;
+    }
+    
+    // Update reservation with table assignment
+    $update_data = array('table_id' => $table_id > 0 ? $table_id : null);
+    $result = $this->reservation_model->update($reservation_id, $update_data);
+    
+    if ($result !== false) {
+        wp_redirect(add_query_arg('message', 'table_assigned', admin_url('admin.php?page=yenolx-reservations')));
+    } else {
+        wp_redirect(add_query_arg('message', 'assignment_failed', admin_url('admin.php?page=yenolx-reservations')));
+    }
+    exit;
+}
+
+public function tables_page() {
+    $this->check_permissions('yrr_manage_tables');
+    
+    // Handle table management actions
+    if (isset($_POST['add_table']) && wp_verify_nonce($_POST['table_nonce'], 'yrr_table_action')) {
+        $this->add_table();
+    }
+    
+    if (isset($_POST['update_table']) && wp_verify_nonce($_POST['table_nonce'], 'yrr_table_action')) {
+        $this->update_table();
+    }
+    
+    if (isset($_GET['delete_table']) && wp_verify_nonce($_GET['_wpnonce'], 'yrr_table_action')) {
+        $this->delete_table(intval($_GET['delete_table']));
+    }
+    
+    // ✅ NEW: Handle table assignment from tables page
+    if (isset($_POST['assign_table_action']) && wp_verify_nonce($_POST['assign_table_nonce'], 'assign_table')) {
+        $this->handle_table_assignment();
+    }
+    
+    $tables = $this->tables_model->get_all_tables();
+    
+    $this->load_view('admin/tables', array('tables' => $tables));
+}
+
 
 // ✅ Add these new methods to your admin controller:
 private function handle_edit_reservation() {
