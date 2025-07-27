@@ -42,13 +42,20 @@ class YRR_Reservation_Model {
         
         // Validate required fields
         if (empty($data['customer_name']) || empty($data['customer_email'])) {
+            error_log('YRR: Missing required fields - name or email');
             return false;
+        }
+        
+        // Ensure proper time format
+        if (!empty($data['reservation_time']) && strlen($data['reservation_time']) === 5) {
+            $data['reservation_time'] = $data['reservation_time'] . ':00';
         }
         
         $result = $this->wpdb->insert($this->table_name, $data);
         
         if ($result === false) {
             error_log('YRR: Failed to create reservation - ' . $this->wpdb->last_error);
+            error_log('YRR: Data attempted: ' . print_r($data, true));
             return false;
         }
         
@@ -93,6 +100,12 @@ class YRR_Reservation_Model {
     
     public function update($id, $data) {
         $data['updated_at'] = current_time('mysql');
+        
+        // Ensure proper time format
+        if (!empty($data['reservation_time']) && strlen($data['reservation_time']) === 5) {
+            $data['reservation_time'] = $data['reservation_time'] . ':00';
+        }
+        
         return $this->wpdb->update($this->table_name, $data, array('id' => $id));
     }
     

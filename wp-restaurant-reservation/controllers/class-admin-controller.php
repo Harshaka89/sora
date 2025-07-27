@@ -459,6 +459,70 @@ class YRR_Admin_Controller {
             ));
         }
     }
+
+    private function create_manual_reservation() {
+    try {
+        // Generate unique reservation code
+        $reservation_code = 'MAN-' . date('Ymd') . '-' . str_pad(rand(1, 999), 3, '0', STR_PAD_LEFT);
+        
+        // Validate required fields
+        if (empty($_POST['customer_name']) || empty($_POST['customer_email']) || empty($_POST['customer_phone'])) {
+            error_log('YRR: Manual reservation - missing required fields');
+            wp_redirect(add_query_arg('message', 'missing_fields', admin_url('admin.php?page=yenolx-reservations')));
+            exit;
+        }
+        
+        // Prepare reservation data
+        $reservation_data = array(
+            'reservation_code' => $reservation_code,
+            'customer_name' => sanitize_text_field($_POST['customer_name']),
+            'customer_email' => sanitize_email($_POST['customer_email']),
+            'customer_phone' => sanitize_text_field($_POST['customer_phone']),
+            'party_size' => intval($_POST['party_size']),
+            'reservation_date' => sanitize_text_field($_POST['reservation_date']),
+            'reservation_time' => sanitize_text_field($_POST['reservation_time']),
+            'special_requests' => sanitize_textarea_field($_POST['special_requests'] ?? ''),
+            'status' => sanitize_text_field($_POST['initial_status'] ?? 'confirmed'),
+            'notes' => sanitize_textarea_field($_POST['admin_notes'] ?? 'Manual reservation created by admin'),
+            'original_price' => 0.00,
+            'discount_amount' => 0.00,
+            'final_price' => 0.00
+        );
+        
+        // Calculate pricing if base price is set
+        $base_price = floatval($this->settings_model->get('base_price_per_person', 0));
+        if ($base_price > 0) {
+            $total_price = $base_price * $reservation_data['party_size'];
+            $reservation_data['original_price'] = $total_price;
+            $reservation_data['final_price'] = $total_price;
+        }
+        
+        // Create reservation
+        $result = $this->reservation_model->create($reservation_data);
+        
+        if ($result) {
+            error_log('YRR: Manual reservation created successfully with ID: ' . $result);
+            
+            // Send confirmation email if function exists
+            if (function_exists('yrr_send_reservation_email_with_discount')) {
+                yrr_send_reservation_email_with_discount($reservation_data);
+            }
+            
+            $redirect_url = add_query_arg('message', 'reservation_created', admin_url('admin.php?page=yenolx-reservations'));
+        } else {
+            error_log('YRR: Failed to create manual reservation');
+            $redirect_url = add_query_arg('message', 'error', admin_url('admin.php?page=yenolx-reservations'));
+        }
+        
+    } catch (Exception $e) {
+        error_log('YRR: Exception in create_manual_reservation: ' . $e->getMessage());
+        $redirect_url = add_query_arg('message', 'error', admin_url('admin.php?page=yenolx-reservations'));
+    }
+    
+    wp_redirect($redirect_url);
+    exit;
+}
+
     
     private function load_view($view, $data = array()) {
         extract($data);

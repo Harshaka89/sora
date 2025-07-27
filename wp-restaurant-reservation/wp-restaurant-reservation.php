@@ -605,5 +605,66 @@ function yrr_send_coupon_notification($coupon_data) {
     return wp_mail($restaurant_email, $subject, $message);
 }
 
+// Add this to wp-restaurant-reservation.php for debugging
+function yrr_debug_manual_reservation() {
+    if (!current_user_can('manage_options') || !isset($_GET['test_manual'])) {
+        return;
+    }
+    
+    global $wpdb;
+    
+    // Test database connection
+    echo '<div style="background: white; padding: 20px; margin: 20px; border: 2px solid #007cba;">';
+    echo '<h3>🔍 Manual Reservation Debug Test</h3>';
+    
+    // Check if reservation model exists
+    if (class_exists('YRR_Reservation_Model')) {
+        echo '<p>✅ YRR_Reservation_Model class exists</p>';
+        
+        $reservation_model = new YRR_Reservation_Model();
+        
+        // Test data
+        $test_data = array(
+            'reservation_code' => 'TEST-' . date('Ymd') . '-001',
+            'customer_name' => 'Test Customer',
+            'customer_email' => 'test@example.com',
+            'customer_phone' => '+1234567890',
+            'party_size' => 2,
+            'reservation_date' => date('Y-m-d'),
+            'reservation_time' => '19:00:00',
+            'status' => 'confirmed',
+            'notes' => 'Debug test reservation'
+        );
+        
+        echo '<p><strong>Test Data:</strong></p>';
+        echo '<pre>' . print_r($test_data, true) . '</pre>';
+        
+        // Try to create reservation
+        $result = $reservation_model->create($test_data);
+        
+        if ($result) {
+            echo '<p>✅ TEST RESERVATION CREATED with ID: ' . $result . '</p>';
+        } else {
+            echo '<p>❌ FAILED TO CREATE TEST RESERVATION</p>';
+            echo '<p>Last database error: ' . $wpdb->last_error . '</p>';
+        }
+        
+    } else {
+        echo '<p>❌ YRR_Reservation_Model class NOT found</p>';
+    }
+    
+    // Check database table
+    $table_name = $wpdb->prefix . 'yrr_reservations';
+    $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_name'") == $table_name;
+    echo '<p>Database table ' . $table_name . ': ' . ($table_exists ? '✅ EXISTS' : '❌ MISSING') . '</p>';
+    
+    if ($table_exists) {
+        $count = $wpdb->get_var("SELECT COUNT(*) FROM $table_name");
+        echo '<p>Total reservations in database: ' . $count . '</p>';
+    }
+    
+    echo '</div>';
+}
+add_action('admin_notices', 'yrr_debug_manual_reservation');
 
 ?>
