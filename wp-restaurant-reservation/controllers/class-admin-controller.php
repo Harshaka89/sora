@@ -59,33 +59,23 @@ class YRR_Admin_Controller {
         return current_user_can('administrator');
     }
     
-public function add_admin_menu() {
-    add_menu_page(
-        'Yenolx Reservations',
-        'Reservations',
-        'yrr_view_dashboard',
-        'yenolx-reservations',
-        array($this, 'dashboard_page'),
-        'dashicons-calendar-alt',
-        26
-    );
-    
-    add_submenu_page('yenolx-reservations', 'Dashboard', 'Dashboard', 'yrr_view_dashboard', 'yenolx-reservations', array($this, 'dashboard_page'));
-    add_submenu_page('yenolx-reservations', 'All Reservations', 'All Reservations', 'yrr_manage_reservations', 'yrr-all-reservations', array($this, 'all_reservations_page'));
-    
-    // ✨ NEW: Add Weekly View Menu Item
-    add_submenu_page('yenolx-reservations', 'Weekly View', 'Weekly View', 'yrr_manage_reservations', 'yrr-weekly-reservations', array($this, 'weekly_reservations_page'));
-    
-    // Super Admin only pages
-    if ($this->is_super_admin()) {
-        add_submenu_page('yenolx-reservations', 'Tables Management', 'Tables', 'yrr_manage_tables', 'yrr-tables', array($this, 'tables_page'));
-        add_submenu_page('yenolx-reservations', 'Operating Hours', 'Hours', 'yrr_manage_hours', 'yrr-hours', array($this, 'hours_page'));
-        add_submenu_page('yenolx-reservations', 'Pricing Rules', 'Pricing', 'yrr_manage_pricing', 'yrr-pricing', array($this, 'pricing_page'));
-        add_submenu_page('yenolx-reservations', 'Discount Coupons', 'Coupons', 'yrr_manage_coupons', 'yrr-coupons', array($this, 'coupons_page'));
-        add_submenu_page('yenolx-reservations', 'Settings', 'Settings', 'yrr_manage_settings', 'yrr-settings', array($this, 'settings_page'));
-    }
-}
-  
+    public function add_admin_menu() {
+        add_menu_page(
+            'Yenolx Reservations',
+            'Reservations',
+            'yrr_view_dashboard',
+            'yenolx-reservations',
+            array($this, 'dashboard_page'),
+            'dashicons-calendar-alt',
+            26
+        );
+        
+        add_submenu_page('yenolx-reservations', 'Dashboard', 'Dashboard', 'yrr_view_dashboard', 'yenolx-reservations', array($this, 'dashboard_page'));
+        add_submenu_page('yenolx-reservations', 'All Reservations', 'All Reservations', 'yrr_manage_reservations', 'yrr-all-reservations', array($this, 'all_reservations_page'));
+        
+        // Weekly View
+        add_submenu_page('yenolx-reservations', 'Weekly View', 'Weekly View', 'yrr_manage_reservations', 'yrr-weekly-reservations', array($this, 'weekly_reservations_page'));
+        
         // Super Admin only pages
         if ($this->is_super_admin()) {
             add_submenu_page('yenolx-reservations', 'Tables Management', 'Tables', 'yrr_manage_tables', 'yrr-tables', array($this, 'tables_page'));
@@ -184,25 +174,21 @@ public function add_admin_menu() {
         );
         
         // Calculate pricing if base price is set
-        $base_price = $this->settings_model->get_base_price();
+        $base_price = $this->settings_model->get('base_price_per_person', 0);
         if ($base_price > 0) {
-            $pricing = $this->pricing_model->calculate_price(
-                $reservation_data['reservation_date'],
-                $reservation_data['reservation_time'],
-                $reservation_data['party_size']
-            );
-            
-            $reservation_data['original_price'] = $pricing['final_total'];
-            $reservation_data['final_price'] = $pricing['final_total'];
-            $reservation_data['price_breakdown'] = json_encode($pricing);
+            $total_price = $base_price * $reservation_data['party_size'];
+            $reservation_data['original_price'] = $total_price;
+            $reservation_data['final_price'] = $total_price;
         }
         
         // Create reservation
         $result = $this->reservation_model->create($reservation_data);
         
         if ($result) {
-            // Send confirmation email
-            yrr_send_reservation_email_with_discount($reservation_data);
+            // Send confirmation email if function exists
+            if (function_exists('yrr_send_reservation_email_with_discount')) {
+                yrr_send_reservation_email_with_discount($reservation_data);
+            }
             
             $redirect_url = add_query_arg('message', 'reservation_created', admin_url('admin.php?page=yenolx-reservations'));
         } else {
@@ -230,6 +216,11 @@ public function add_admin_menu() {
             'date_from' => $date_from,
             'date_to' => $date_to
         ));
+    }
+    
+    public function weekly_reservations_page() {
+        $this->check_permissions('yrr_manage_reservations');
+        $this->load_view('admin/weekly-reservations');
     }
     
     public function tables_page() {
@@ -304,7 +295,7 @@ public function add_admin_menu() {
         $this->load_view('admin/settings', array('settings' => $settings));
     }
     
-    // Helper methods for CRUD operations
+    // Helper methods
     private function add_table() {
         $data = array(
             'table_number' => sanitize_text_field($_POST['table_number']),
@@ -435,25 +426,6 @@ public function add_admin_menu() {
         foreach ($settings_to_save as $setting) {
             if (isset($_POST[$setting])) {
                 $value = sanitize_text_field($_POST[$setting]);
-                
-                // Enhanced validation
-                if ($setting === 'restaurant_phone') {
-                    $validated_phone = $this->settings_model->validate_phone($value);
-                    if ($validated_phone === false && !empty($value)) {
-                        $errors[] = 'Invalid phone number format';
-                        continue;
-                    }
-                    $value = $validated_phone;
-                }
-                
-                if ($setting === 'restaurant_address') {
-                    $value = $this->settings_model->validate_address($value);
-                }
-                
-                if ($setting === 'restaurant_email' && !empty($value) && !is_email($value)) {
-                    $errors[] = 'Invalid email format';
-                    continue;
-                }
                 
                 $result = $this->settings_model->set($setting, $value);
                 if ($result !== false) {
