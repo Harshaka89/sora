@@ -1,18 +1,18 @@
 <?php
 /**
- * Settings Model Class - Complete Error-Free Version
+ * Settings Model - Yenolx Restaurant Reservation v1.5
  */
 
 if (!defined('ABSPATH')) exit;
 
-class RRS_Settings_Model {
+class YRR_Settings_Model {
     private $table_name;
     private $wpdb;
     
     public function __construct() {
         global $wpdb;
         $this->wpdb = $wpdb;
-        $this->table_name = $wpdb->prefix . 'rrs_settings';
+        $this->table_name = $wpdb->prefix . 'yrr_settings';
     }
     
     public function get($setting_name, $default = '') {
@@ -43,45 +43,27 @@ class RRS_Settings_Model {
         
         $defaults = array(
             'restaurant_open' => '1',
-            'max_party_size' => '12',
             'restaurant_name' => get_bloginfo('name'),
             'restaurant_email' => get_option('admin_email'),
             'restaurant_phone' => '',
             'restaurant_address' => '',
-            'advance_booking_hours' => '2',
-            'max_advance_days' => '60',
+            'max_party_size' => '12',
+            'base_price_per_person' => '0.00',
+            'booking_time_slots' => '30',
+            'max_booking_advance_days' => '60',
             'currency_symbol' => '$',
-            'time_format' => '12hour'
+            'time_format' => '12hour',
+            'booking_buffer_minutes' => '15',
+            'max_dining_duration' => '120'
         );
         
         return array_merge($defaults, $settings);
     }
     
-    public function delete($setting_name) {
-        return $this->wpdb->delete($this->table_name, array('setting_name' => $setting_name));
-    }
-    
-    public function is_restaurant_open() {
-        return $this->get('restaurant_open', '1') === '1';
-    }
-    
-    public function get_hours($day) {
-        $hours = $this->get($day . '_hours', '10:00-22:00');
-        $parts = explode('-', $hours);
-        
-        return array(
-            'open' => isset($parts[0]) ? trim($parts[0]) : '10:00',
-            'close' => isset($parts[1]) ? trim($parts[1]) : '22:00',
-            'full' => $hours
-        );
-    }
-    
     public function validate_phone($phone) {
         $cleaned = preg_replace('/[^0-9\+\-\(\)\s\.]/', '', trim($phone));
         
-        if (empty($cleaned)) {
-            return '';
-        }
+        if (empty($cleaned)) return '';
         
         $digits_only = preg_replace('/[^0-9]/', '', $cleaned);
         if (strlen($digits_only) < 7 || strlen($digits_only) > 15) {
@@ -89,6 +71,23 @@ class RRS_Settings_Model {
         }
         
         return $cleaned;
+    }
+    
+    public function validate_address($address) {
+        $cleaned = trim($address);
+        return !empty($cleaned) ? sanitize_text_field($cleaned) : '';
+    }
+    
+    public function is_restaurant_open() {
+        return $this->get('restaurant_open', '1') === '1';
+    }
+    
+    public function get_base_price() {
+        return floatval($this->get('base_price_per_person', '0.00'));
+    }
+    
+    public function get_booking_slots() {
+        return intval($this->get('booking_time_slots', '30'));
     }
 }
 ?>
