@@ -1,8 +1,8 @@
 <?php
 /**
  * Plugin Name: Yenolx Restaurant Reservation
- * Description: Advanced restaurant reservation management with table booking, dynamic pricing, and operating hours
- * Version: 1.5.0
+ * Description: Advanced restaurant reservation management with discount coupons, table booking, and dynamic pricing
+ * Version: 1.5.1
  * Author: Yenolx
  * Text Domain: yenolx-restaurant
  */
@@ -12,18 +12,19 @@ define('YRR_PLUGIN_LOADED', true);
 
 if (!defined('ABSPATH')) exit;
 
-define('YRR_VERSION', '1.5.0');
+define('YRR_VERSION', '1.5.1');
 define('YRR_PLUGIN_PATH', plugin_dir_path(__FILE__));
 define('YRR_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('YRR_PLUGIN_BASENAME', plugin_basename(__FILE__));
 
-// Enhanced database structure for v1.5
+// Enhanced database structure for v1.5.1 with coupons
 function yrr_ensure_database_structure() {
     if (!is_admin() || wp_doing_ajax()) return;
     
-    if (get_transient('yrr_db_check_done_v15')) return;
+    if (get_transient('yrr_db_check_done_v151')) return;
     
     global $wpdb;
+    require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
     $charset_collate = $wpdb->get_charset_collate();
     
     // Settings table
@@ -38,7 +39,7 @@ function yrr_ensure_database_structure() {
         UNIQUE KEY setting_name (setting_name)
     ) $charset_collate");
     
-    // Reservations table
+    // Reservations table (enhanced with coupon support)
     $reservations_table = $wpdb->prefix . 'yrr_reservations';
     $wpdb->query("CREATE TABLE IF NOT EXISTS $reservations_table (
         id int(11) NOT NULL AUTO_INCREMENT,
@@ -52,7 +53,10 @@ function yrr_ensure_database_structure() {
         special_requests text DEFAULT NULL,
         status varchar(20) NOT NULL DEFAULT 'pending',
         table_id int(11) DEFAULT NULL,
-        total_price decimal(10,2) DEFAULT 0.00,
+        coupon_code varchar(50) DEFAULT NULL,
+        original_price decimal(10,2) DEFAULT 0.00,
+        discount_amount decimal(10,2) DEFAULT 0.00,
+        final_price decimal(10,2) DEFAULT 0.00,
         price_breakdown text DEFAULT NULL,
         notes text DEFAULT NULL,
         created_at datetime DEFAULT CURRENT_TIMESTAMP,
@@ -61,7 +65,8 @@ function yrr_ensure_database_structure() {
         UNIQUE KEY reservation_code (reservation_code),
         INDEX idx_date (reservation_date),
         INDEX idx_status (status),
-        INDEX idx_table (table_id)
+        INDEX idx_table (table_id),
+        INDEX idx_coupon (coupon_code)
     ) $charset_collate");
     
     // Tables management
@@ -109,10 +114,34 @@ function yrr_ensure_database_structure() {
         PRIMARY KEY (id)
     ) $charset_collate");
     
+    // NEW: Discount Coupons table
+    $coupons_table = $wpdb->prefix . 'yrr_coupons';
+    $wpdb->query("CREATE TABLE IF NOT EXISTS $coupons_table (
+        id int(11) NOT NULL AUTO_INCREMENT,
+        coupon_code varchar(50) NOT NULL,
+        coupon_name varchar(100) NOT NULL,
+        discount_type varchar(20) DEFAULT 'percentage',
+        discount_value decimal(10,2) NOT NULL,
+        min_order_amount decimal(10,2) DEFAULT 0.00,
+        max_discount_amount decimal(10,2) DEFAULT NULL,
+        usage_limit int(11) DEFAULT NULL,
+        usage_count int(11) DEFAULT 0,
+        valid_from datetime DEFAULT CURRENT_TIMESTAMP,
+        valid_until datetime DEFAULT NULL,
+        is_active boolean DEFAULT 1,
+        created_by int(11) DEFAULT NULL,
+        created_at datetime DEFAULT CURRENT_TIMESTAMP,
+        updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        UNIQUE KEY coupon_code (coupon_code),
+        INDEX idx_active (is_active),
+        INDEX idx_dates (valid_from, valid_until)
+    ) $charset_collate");
+    
     // Insert default data
     yrr_insert_default_data();
     
-    set_transient('yrr_db_check_done_v15', true, DAY_IN_SECONDS);
+    set_transient('yrr_db_check_done_v151', true, DAY_IN_SECONDS);
 }
 
 function yrr_insert_default_data() {
@@ -126,16 +155,25 @@ function yrr_insert_default_data() {
         'restaurant_phone' => '',
         'restaurant_address' => '',
         'max_party_size' => '12',
-        'base_price_per_person' => '0.00',
+        'base_price_per_person' => '10.00',
         'booking_time_slots' => '30',
-        'max_booking_advance_days' => '60'
+        'max_booking_advance_days' => '60',
+        'currency_symbol' => '$',
+        'enable_coupons' => '1'
     );
     
     foreach ($settings as $name => $value) {
-        $wpdb->replace($wpdb->prefix . 'yrr_settings', array(
-            'setting_name' => $name,
-            'setting_value' => $value
+        $existing = $wpdb->get_var($wpdb->prepare(
+            "SELECT setting_value FROM {$wpdb->prefix}yrr_settings WHERE setting_name = %s",
+            $name
         ));
+        
+        if ($existing === null) {
+            $wpdb->insert($wpdb->prefix . 'yrr_settings', array(
+                'setting_name' => $name,
+                'setting_value' => $value
+            ));
+        }
     }
     
     // Default operating hours
@@ -181,7 +219,7 @@ function yrr_insert_default_data() {
                 'start_time' => '11:00:00',
                 'end_time' => '15:00:00',
                 'days_applicable' => 'weekdays',
-                'price_modifier' => -1.00,
+                'price_modifier' => -2.00,
                 'modifier_type' => 'add'
             ),
             array(
@@ -189,13 +227,42 @@ function yrr_insert_default_data() {
                 'start_time' => '18:00:00',
                 'end_time' => '21:00:00',
                 'days_applicable' => 'all',
-                'price_modifier' => 2.00,
+                'price_modifier' => 5.00,
                 'modifier_type' => 'add'
             )
         );
         
         foreach ($pricing_rules as $rule) {
             $wpdb->insert($wpdb->prefix . 'yrr_pricing_rules', $rule);
+        }
+    }
+    
+    // Default sample coupons
+    $existing_coupons = $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}yrr_coupons");
+    if ($existing_coupons == 0) {
+        $sample_coupons = array(
+            array(
+                'coupon_code' => 'WELCOME20',
+                'coupon_name' => 'Welcome Discount',
+                'discount_type' => 'percentage',
+                'discount_value' => 20.00,
+                'min_order_amount' => 25.00,
+                'usage_limit' => 100,
+                'valid_until' => date('Y-m-d H:i:s', strtotime('+6 months'))
+            ),
+            array(
+                'coupon_code' => 'SAVE10',
+                'coupon_name' => '$10 Off Discount',
+                'discount_type' => 'fixed',
+                'discount_value' => 10.00,
+                'min_order_amount' => 50.00,
+                'usage_limit' => 50,
+                'valid_until' => date('Y-m-d H:i:s', strtotime('+3 months'))
+            )
+        );
+        
+        foreach ($sample_coupons as $coupon) {
+            $wpdb->insert($wpdb->prefix . 'yrr_coupons', $coupon);
         }
     }
 }
@@ -246,7 +313,7 @@ class YRR_Plugin {
         foreach ($required_files as $file) {
             $file_path = YRR_PLUGIN_PATH . $file;
             if (!file_exists($file_path)) {
-                throw new Exception("Required file missing: $file");
+                throw new Exception("Required file missing: $file - Please ensure all plugin files are uploaded correctly.");
             }
             require_once $file_path;
         }
@@ -261,12 +328,15 @@ class YRR_Plugin {
             'settings' => 'YRR_Settings_Controller',
             'tables' => 'YRR_Tables_Controller',
             'hours' => 'YRR_Hours_Controller',
-            'pricing' => 'YRR_Pricing_Controller'
+            'pricing' => 'YRR_Pricing_Controller',
+            'coupons' => 'YRR_Coupons_Controller'
         );
         
         foreach ($controller_classes as $key => $class_name) {
             if (class_exists($class_name)) {
                 $this->controllers[$key] = new $class_name();
+            } else {
+                error_log("YRR: Controller class $class_name not found");
             }
         }
     }
@@ -293,12 +363,22 @@ class YRR_Plugin {
             $this->loader->add_action('wp_ajax_yrr_calculate_price', $this->controllers['pricing'], 'ajax_calculate_price');
             $this->loader->add_action('wp_ajax_nopriv_yrr_calculate_price', $this->controllers['pricing'], 'ajax_calculate_price');
         }
+        
+        if (isset($this->controllers['coupons'])) {
+            $this->loader->add_action('wp_ajax_yrr_validate_coupon', $this->controllers['coupons'], 'ajax_validate_coupon');
+            $this->loader->add_action('wp_ajax_nopriv_yrr_validate_coupon', $this->controllers['coupons'], 'ajax_validate_coupon');
+        }
     }
     
     public function run() {
         $this->loader->run();
     }
 }
+
+
+
+
+
 
 function yrr_init_plugin() {
     $yrr_plugin = new YRR_Plugin();
@@ -307,29 +387,223 @@ function yrr_init_plugin() {
 
 add_action('plugins_loaded', 'yrr_init_plugin');
 
-// Debug function for testing
-function yrr_debug_info() {
-    if (!current_user_can('manage_options') || !isset($_GET['yrr_debug'])) {
-        return;
+
+
+/**
+ * Enhanced Email Function with Discount Support
+ * Add this before the closing ?> tag in wp-restaurant-reservation.php
+ */
+function yrr_send_reservation_email_with_discount($reservation_data, $coupon_data = null) {
+    // Get restaurant settings
+    $settings_model = new YRR_Settings_Model();
+    $restaurant_name = $settings_model->get('restaurant_name', get_bloginfo('name'));
+    $restaurant_email = $settings_model->get('restaurant_email', get_option('admin_email'));
+    $restaurant_phone = $settings_model->get('restaurant_phone', '');
+    $restaurant_address = $settings_model->get('restaurant_address', '');
+    $currency_symbol = $settings_model->get('currency_symbol', '$');
+    
+    // Prepare email headers
+    $headers = array(
+        'Content-Type: text/html; charset=UTF-8',
+        'From: ' . $restaurant_name . ' <' . $restaurant_email . '>'
+    );
+    
+    // **CUSTOMER EMAIL** - Reservation confirmation with discount details
+    $customer_subject = '🎉 Reservation Confirmed - ' . $restaurant_name;
+    
+    // Start building HTML email for customer
+    $customer_message = '
+    <html>
+    <head>
+        <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+            .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
+            .info-box { background: white; padding: 20px; margin: 20px 0; border-radius: 8px; border-left: 5px solid #667eea; }
+            .discount-box { background: #d4edda; padding: 20px; margin: 20px 0; border-radius: 8px; border-left: 5px solid #28a745; }
+            .footer { text-align: center; margin-top: 30px; color: #666; }
+            .highlight { background: #fff3cd; padding: 15px; border-radius: 5px; margin: 10px 0; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>🍽️ ' . esc_html($restaurant_name) . '</h1>
+                <p>Your reservation has been confirmed!</p>
+            </div>
+            
+            <div class="content">
+                <h2>Dear ' . esc_html($reservation_data['customer_name']) . ',</h2>
+                <p>Thank you for choosing us! Your reservation has been successfully confirmed.</p>
+                
+                <div class="info-box">
+                    <h3>📅 Reservation Details</h3>
+                    <p><strong>Reservation Code:</strong> ' . esc_html($reservation_data['reservation_code']) . '</p>
+                    <p><strong>Date:</strong> ' . date('F j, Y', strtotime($reservation_data['reservation_date'])) . '</p>
+                    <p><strong>Time:</strong> ' . date('g:i A', strtotime($reservation_data['reservation_time'])) . '</p>
+                    <p><strong>Party Size:</strong> ' . intval($reservation_data['party_size']) . ' guests</p>';
+    
+    if (!empty($reservation_data['special_requests'])) {
+        $customer_message .= '<p><strong>Special Requests:</strong> ' . esc_html($reservation_data['special_requests']) . '</p>';
     }
     
-    global $wpdb;
-    echo '<div style="background: white; padding: 20px; margin: 20px; border: 2px solid #007cba; border-radius: 10px;">';
-    echo '<h3>🔍 Yenolx Restaurant Reservation v1.5 Debug Info</h3>';
+    $customer_message .= '</div>';
     
-    // Check tables
-    $tables = array('yrr_settings', 'yrr_reservations', 'yrr_tables', 'yrr_operating_hours', 'yrr_pricing_rules');
-    foreach ($tables as $table) {
-        $full_table_name = $wpdb->prefix . $table;
-        $exists = $wpdb->get_var("SHOW TABLES LIKE '$full_table_name'") == $full_table_name;
-        $count = $exists ? $wpdb->get_var("SELECT COUNT(*) FROM $full_table_name") : 0;
-        echo '<p><strong>' . $table . ':</strong> ' . ($exists ? "✅ EXISTS ($count records)" : "❌ MISSING") . '</p>';
+    // Add discount information if coupon was used
+    if ($coupon_data && isset($reservation_data['discount_amount']) && $reservation_data['discount_amount'] > 0) {
+        $customer_message .= '
+                <div class="discount-box">
+                    <h3>🎫 Discount Applied - You Saved!</h3>
+                    <p><strong>Coupon Code:</strong> ' . esc_html($coupon_data['coupon_code']) . '</p>
+                    <p><strong>Discount:</strong> ';
+        
+        if ($coupon_data['discount_type'] === 'percentage') {
+            $customer_message .= number_format($coupon_data['discount_value'], 0) . '%';
+        } else {
+            $customer_message .= $currency_symbol . number_format($coupon_data['discount_value'], 2);
+        }
+        
+        $customer_message .= '</p>
+                    <div class="highlight">
+                        <p><strong>💰 Pricing Breakdown:</strong></p>
+                        <p>Original Amount: ' . $currency_symbol . number_format($reservation_data['original_price'], 2) . '</p>
+                        <p>Discount Amount: <span style="color: #28a745;">-' . $currency_symbol . number_format($reservation_data['discount_amount'], 2) . '</span></p>
+                        <p><strong>Final Amount: ' . $currency_symbol . number_format($reservation_data['final_price'], 2) . '</strong></p>
+                        <p style="color: #28a745; font-weight: bold;">🎉 You saved ' . $currency_symbol . number_format($reservation_data['discount_amount'], 2) . '!</p>
+                    </div>
+                </div>';
     }
     
-    echo '<p><strong>Plugin Version:</strong> ' . YRR_VERSION . '</p>';
-    echo '<p><strong>Database Check:</strong> ' . (get_transient('yrr_db_check_done_v15') ? '✅ DONE' : '❌ PENDING') . '</p>';
-    echo '</div>';
+    // Add restaurant contact information
+    $customer_message .= '
+                <div class="info-box">
+                    <h3>📞 Contact Information</h3>';
+    
+    if ($restaurant_phone) {
+        $customer_message .= '<p><strong>Phone:</strong> ' . esc_html($restaurant_phone) . '</p>';
+    }
+    
+    if ($restaurant_address) {
+        $customer_message .= '<p><strong>Address:</strong> ' . esc_html($restaurant_address) . '</p>';
+    }
+    
+    $customer_message .= '<p><strong>Email:</strong> ' . esc_html($restaurant_email) . '</p>
+                </div>
+                
+                <p>We look forward to serving you! If you need to make any changes to your reservation, please contact us as soon as possible.</p>
+                
+                <div class="footer">
+                    <p>Best regards,<br><strong>' . esc_html($restaurant_name) . '</strong></p>
+                    <p><small>This is an automated confirmation email. Please save it for your records.</small></p>
+                </div>
+            </div>
+        </div>
+    </body>
+    </html>';
+    
+    // **ADMIN EMAIL** - New reservation notification
+    $admin_subject = '🆕 New Reservation' . ($coupon_data ? ' with Discount' : '') . ' - ' . $reservation_data['reservation_code'];
+    
+    $admin_message = '
+    <html>
+    <head>
+        <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: #28a745; color: white; padding: 20px; text-align: center; border-radius: 5px; }
+            .info { background: #f8f9fa; padding: 20px; margin: 15px 0; border-radius: 5px; }
+            .discount { background: #fff3cd; padding: 15px; margin: 15px 0; border-radius: 5px; border-left: 5px solid #ffc107; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h2>New Reservation Received</h2>
+            </div>
+            
+            <div class="info">
+                <h3>Customer Information</h3>
+                <p><strong>Name:</strong> ' . esc_html($reservation_data['customer_name']) . '</p>
+                <p><strong>Email:</strong> ' . esc_html($reservation_data['customer_email']) . '</p>
+                <p><strong>Phone:</strong> ' . esc_html($reservation_data['customer_phone']) . '</p>
+            </div>
+            
+            <div class="info">
+                <h3>Reservation Details</h3>
+                <p><strong>Code:</strong> ' . esc_html($reservation_data['reservation_code']) . '</p>
+                <p><strong>Date:</strong> ' . date('F j, Y', strtotime($reservation_data['reservation_date'])) . '</p>
+                <p><strong>Time:</strong> ' . date('g:i A', strtotime($reservation_data['reservation_time'])) . '</p>
+                <p><strong>Party Size:</strong> ' . intval($reservation_data['party_size']) . ' guests</p>';
+    
+    if (!empty($reservation_data['special_requests'])) {
+        $admin_message .= '<p><strong>Special Requests:</strong> ' . esc_html($reservation_data['special_requests']) . '</p>';
+    }
+    
+    $admin_message .= '</div>';
+    
+    // Add discount information for admin
+    if ($coupon_data && isset($reservation_data['discount_amount']) && $reservation_data['discount_amount'] > 0) {
+        $admin_message .= '
+            <div class="discount">
+                <h3>💰 Discount Coupon Used</h3>
+                <p><strong>Coupon Code:</strong> ' . esc_html($coupon_data['coupon_code']) . '</p>
+                <p><strong>Coupon Name:</strong> ' . esc_html($coupon_data['coupon_name']) . '</p>
+                <p><strong>Discount Applied:</strong> ' . $currency_symbol . number_format($reservation_data['discount_amount'], 2) . '</p>
+                <p><strong>Final Amount:</strong> ' . $currency_symbol . number_format($reservation_data['final_price'], 2) . '</p>
+            </div>';
+    }
+    
+    $admin_message .= '
+            <p><strong>Action Required:</strong> Please review and confirm this reservation in your admin dashboard.</p>
+        </div>
+    </body>
+    </html>';
+    
+    // Send emails
+    $customer_sent = wp_mail($reservation_data['customer_email'], $customer_subject, $customer_message, $headers);
+    $admin_sent = wp_mail($restaurant_email, $admin_subject, $admin_message, $headers);
+    
+    // Log email results for debugging
+    if (!$customer_sent) {
+        error_log('YRR: Failed to send customer confirmation email to ' . $reservation_data['customer_email']);
+    }
+    
+    if (!$admin_sent) {
+        error_log('YRR: Failed to send admin notification email to ' . $restaurant_email);
+    }
+    
+    return array(
+        'customer_sent' => $customer_sent,
+        'admin_sent' => $admin_sent
+    );
 }
 
-add_action('admin_notices', 'yrr_debug_info');
+/**
+ * Helper function to send simple coupon notification emails
+ */
+function yrr_send_coupon_notification($coupon_data) {
+    $settings_model = new YRR_Settings_Model();
+    $restaurant_email = $settings_model->get('restaurant_email', get_option('admin_email'));
+    $restaurant_name = $settings_model->get('restaurant_name', get_bloginfo('name'));
+    
+    $subject = 'New Discount Coupon Created - ' . $coupon_data['coupon_code'];
+    $message = "A new discount coupon has been created in " . $restaurant_name . ":\n\n";
+    $message .= "Coupon Code: " . $coupon_data['coupon_code'] . "\n";
+    $message .= "Coupon Name: " . $coupon_data['coupon_name'] . "\n";
+    $message .= "Discount: ";
+    
+    if ($coupon_data['discount_type'] === 'percentage') {
+        $message .= $coupon_data['discount_value'] . "%\n";
+    } else {
+        $message .= "$" . number_format($coupon_data['discount_value'], 2) . "\n";
+    }
+    
+    $message .= "Valid Until: " . ($coupon_data['valid_until'] ?: 'No expiry') . "\n";
+    $message .= "Created: " . date('Y-m-d H:i:s') . "\n";
+    
+    return wp_mail($restaurant_email, $subject, $message);
+}
+
+
 ?>

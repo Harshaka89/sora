@@ -1,6 +1,6 @@
 <?php
 /**
- * Admin Controller - Yenolx Restaurant Reservation v1.5
+ * Admin Controller - Yenolx Restaurant Reservation v1.5.1
  */
 
 if (!defined('ABSPATH')) exit;
@@ -11,6 +11,7 @@ class YRR_Admin_Controller {
     private $tables_model;
     private $hours_model;
     private $pricing_model;
+    private $coupons_model;
     
     public function __construct() {
         $this->reservation_model = new YRR_Reservation_Model();
@@ -18,6 +19,7 @@ class YRR_Admin_Controller {
         $this->tables_model = new YRR_Tables_Model();
         $this->hours_model = new YRR_Hours_Model();
         $this->pricing_model = new YRR_Pricing_Model();
+        $this->coupons_model = new YRR_Coupons_Model();
     }
     
     public function add_admin_menu() {
@@ -36,10 +38,56 @@ class YRR_Admin_Controller {
         add_submenu_page('yenolx-reservations', 'Tables Management', 'Tables', 'manage_options', 'yrr-tables', array($this, 'tables_page'));
         add_submenu_page('yenolx-reservations', 'Operating Hours', 'Hours', 'manage_options', 'yrr-hours', array($this, 'hours_page'));
         add_submenu_page('yenolx-reservations', 'Pricing Rules', 'Pricing', 'manage_options', 'yrr-pricing', array($this, 'pricing_page'));
+        add_submenu_page('yenolx-reservations', 'Discount Coupons', 'Coupons', 'manage_options', 'yrr-coupons', array($this, 'coupons_page'));
         add_submenu_page('yenolx-reservations', 'Settings', 'Settings', 'manage_options', 'yrr-settings', array($this, 'settings_page'));
     }
     
     public function dashboard_page() {
+        // Handle reservation actions
+        if (isset($_GET['action']) && isset($_GET['id']) && wp_verify_nonce($_GET['_wpnonce'], 'reservation_action')) {
+            $id = intval($_GET['id']);
+            $redirect_url = admin_url('admin.php?page=yenolx-reservations');
+            
+            switch ($_GET['action']) {
+                case 'confirm':
+                    $result = $this->reservation_model->update($id, array('status' => 'confirmed'));
+                    $redirect_url = add_query_arg('message', $result ? 'confirmed' : 'error', $redirect_url);
+                    break;
+                    
+                case 'cancel':
+                    $result = $this->reservation_model->update($id, array('status' => 'cancelled'));
+                    $redirect_url = add_query_arg('message', $result ? 'cancelled' : 'error', $redirect_url);
+                    break;
+                    
+                case 'delete':
+                    $result = $this->reservation_model->delete($id);
+                    $redirect_url = add_query_arg('message', $result ? 'deleted' : 'error', $redirect_url);
+                    break;
+            }
+            
+            wp_redirect($redirect_url);
+            exit;
+        }
+        
+        // Handle edit form submission
+        if (isset($_POST['edit_reservation']) && wp_verify_nonce($_POST['edit_nonce'], 'edit_reservation')) {
+            $id = intval($_POST['reservation_id']);
+            $update_data = array(
+                'customer_name' => sanitize_text_field($_POST['customer_name']),
+                'customer_email' => sanitize_email($_POST['customer_email']),
+                'customer_phone' => sanitize_text_field($_POST['customer_phone']),
+                'party_size' => intval($_POST['party_size']),
+                'reservation_date' => sanitize_text_field($_POST['reservation_date']),
+                'reservation_time' => sanitize_text_field($_POST['reservation_time']),
+                'special_requests' => sanitize_textarea_field($_POST['special_requests'] ?? ''),
+                'notes' => sanitize_textarea_field($_POST['notes'] ?? '')
+            );
+            
+            $result = $this->reservation_model->update($id, $update_data);
+            wp_redirect(add_query_arg('message', $result ? 'updated' : 'error', admin_url('admin.php?page=yenolx-reservations')));
+            exit;
+        }
+        
         $statistics = $this->reservation_model->get_statistics();
         $today_reservations = $this->reservation_model->get_by_date(date('Y-m-d'));
         $restaurant_status = $this->settings_model->get('restaurant_open', '1');
@@ -53,83 +101,21 @@ class YRR_Admin_Controller {
         ));
     }
     
-    public function settings_page() {
-        if (isset($_POST['save_settings']) && wp_verify_nonce($_POST['settings_nonce'], 'yrr_settings_save')) {
-            $this->save_settings_enhanced();
-        }
+    public function all_reservations_page() {
+        $search = isset($_GET['search']) ? sanitize_text_field($_GET['search']) : '';
+        $status_filter = isset($_GET['status']) ? sanitize_text_field($_GET['status']) : '';
+        $date_from = isset($_GET['date_from']) ? sanitize_text_field($_GET['date_from']) : '';
+        $date_to = isset($_GET['date_to']) ? sanitize_text_field($_GET['date_to']) : '';
         
-        $settings = $this->settings_model->get_all();
+        $reservations = $this->reservation_model->get_filtered_reservations($search, $status_filter, $date_from, $date_to);
         
-        $this->load_view('admin/settings', array('settings' => $settings));
-    }
-    
-    private function save_settings_enhanced() {
-        $settings_to_save = array(
-            'restaurant_open',
-            'restaurant_name',
-            'restaurant_email',
-            'restaurant_phone',
-            'restaurant_address',
-            'max_party_size',
-            'base_price_per_person',
-            'booking_time_slots',
-            'max_booking_advance_days',
-            'currency_symbol',
-            'booking_buffer_minutes',
-            'max_dining_duration'
-        );
-        
-        $saved_count = 0;
-        $errors = array();
-        
-        foreach ($settings_to_save as $setting) {
-            if (isset($_POST[$setting])) {
-                $value = sanitize_text_field($_POST[$setting]);
-                
-                // Enhanced validation
-                if ($setting === 'restaurant_phone') {
-                    $validated_phone = $this->settings_model->validate_phone($value);
-                    if ($validated_phone === false && !empty($value)) {
-                        $errors[] = 'Invalid phone number format';
-                        continue;
-                    }
-                    $value = $validated_phone;
-                }
-                
-                if ($setting === 'restaurant_address') {
-                    $value = $this->settings_model->validate_address($value);
-                }
-                
-                if ($setting === 'restaurant_email' && !empty($value) && !is_email($value)) {
-                    $errors[] = 'Invalid email format';
-                    continue;
-                }
-                
-                $result = $this->settings_model->set($setting, $value);
-                if ($result !== false) {
-                    $saved_count++;
-                } else {
-                    $errors[] = "Failed to save $setting";
-                }
-            }
-        }
-        
-        wp_cache_flush();
-        
-        update_option('yrr_save_result', array(
-            'saved_count' => $saved_count,
-            'errors' => $errors,
-            'timestamp' => current_time('mysql')
+        $this->load_view('admin/all-reservations', array(
+            'reservations' => $reservations,
+            'search' => $search,
+            'status_filter' => $status_filter,
+            'date_from' => $date_from,
+            'date_to' => $date_to
         ));
-        
-        $redirect_url = add_query_arg(array(
-            'message' => 'saved',
-            'count' => $saved_count,
-            'error_count' => count($errors)
-        ), admin_url('admin.php?page=yrr-settings'));
-        
-        wp_redirect($redirect_url);
-        exit;
     }
     
     public function tables_page() {
@@ -166,11 +152,31 @@ class YRR_Admin_Controller {
             $this->add_pricing_rule();
         }
         
+        if (isset($_GET['delete_rule']) && wp_verify_nonce($_GET['_wpnonce'], 'yrr_pricing_action')) {
+            $this->delete_pricing_rule(intval($_GET['delete_rule']));
+        }
+        
         $rules = $this->pricing_model->get_all_rules();
         
         $this->load_view('admin/pricing', array('rules' => $rules));
     }
     
+    public function coupons_page() {
+        $coupons_controller = new YRR_Coupons_Controller();
+        $coupons_controller->coupons_page();
+    }
+    
+    public function settings_page() {
+        if (isset($_POST['save_settings']) && wp_verify_nonce($_POST['settings_nonce'], 'yrr_settings_save')) {
+            $this->save_settings_enhanced();
+        }
+        
+        $settings = $this->settings_model->get_all();
+        
+        $this->load_view('admin/settings', array('settings' => $settings));
+    }
+    
+    // Helper methods
     private function add_table() {
         $data = array(
             'table_number' => sanitize_text_field($_POST['table_number']),
@@ -227,6 +233,84 @@ class YRR_Admin_Controller {
         exit;
     }
     
+    private function delete_pricing_rule($id) {
+        $result = $this->pricing_model->delete_rule($id);
+        
+        $redirect_url = add_query_arg('message', $result ? 'rule_deleted' : 'error', admin_url('admin.php?page=yrr-pricing'));
+        wp_redirect($redirect_url);
+        exit;
+    }
+    
+    private function save_settings_enhanced() {
+        $settings_to_save = array(
+            'restaurant_open',
+            'restaurant_name',
+            'restaurant_email',
+            'restaurant_phone',
+            'restaurant_address',
+            'max_party_size',
+            'base_price_per_person',
+            'booking_time_slots',
+            'max_booking_advance_days',
+            'currency_symbol',
+            'booking_buffer_minutes',
+            'max_dining_duration',
+            'enable_coupons'
+        );
+        
+        $saved_count = 0;
+        $errors = array();
+        
+        foreach ($settings_to_save as $setting) {
+            if (isset($_POST[$setting])) {
+                $value = sanitize_text_field($_POST[$setting]);
+                
+                // Enhanced validation
+                if ($setting === 'restaurant_phone') {
+                    $validated_phone = $this->settings_model->validate_phone($value);
+                    if ($validated_phone === false && !empty($value)) {
+                        $errors[] = 'Invalid phone number format';
+                        continue;
+                    }
+                    $value = $validated_phone;
+                }
+                
+                if ($setting === 'restaurant_address') {
+                    $value = $this->settings_model->validate_address($value);
+                }
+                
+                if ($setting === 'restaurant_email' && !empty($value) && !is_email($value)) {
+                    $errors[] = 'Invalid email format';
+                    continue;
+                }
+                
+                $result = $this->settings_model->set($setting, $value);
+                if ($result !== false) {
+                    $saved_count++;
+                } else {
+                    $errors[] = "Failed to save $setting";
+                }
+            }
+        }
+        
+        wp_cache_flush();
+        
+        update_option('yrr_save_result', array(
+            'saved_count' => $saved_count,
+            'errors' => $errors,
+            'timestamp' => current_time('mysql')
+        ));
+        
+        $redirect_url = add_query_arg(array(
+            'message' => 'saved',
+            'count' => $saved_count,
+            'error_count' => count($errors)
+        ), admin_url('admin.php?page=yrr-settings'));
+        
+        wp_redirect($redirect_url);
+        exit;
+    }
+    
     public function enqueue_admin_assets($hook) {
         if (strpos($hook, 'yenolx') !== false || strpos($hook, 'yrr') !== false) {
             wp_enqueue_style('yrr-admin-styles', YRR_PLUGIN_URL . 'assets/admin.css', array(), YRR_VERSION);
@@ -241,7 +325,13 @@ class YRR_Admin_Controller {
     
     private function load_view($view, $data = array()) {
         extract($data);
-        include YRR_PLUGIN_PATH . 'views/' . $view . '.php';
+        $view_file = YRR_PLUGIN_PATH . 'views/' . $view . '.php';
+        
+        if (file_exists($view_file)) {
+            include $view_file;
+        } else {
+            echo '<div class="notice notice-error"><p>View file not found: ' . esc_html($view) . '.php</p></div>';
+        }
     }
 }
 ?>
