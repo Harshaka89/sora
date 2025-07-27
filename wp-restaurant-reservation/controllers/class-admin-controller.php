@@ -41,22 +41,27 @@ class RRS_Admin_Controller {
         $this->settings_model = new RRS_Settings_Model();
     }
     
-    public function add_admin_menu() {
-        add_menu_page(
-            'Restaurant Reservations',
-            'Reservations',
-            'manage_options',
-            'reservations',
-            array($this, 'dashboard_page'),
-            'dashicons-calendar-alt',
-            26
-        );
-        
-        add_submenu_page('reservations', 'Dashboard', 'Dashboard', 'manage_options', 'reservations', array($this, 'dashboard_page'));
-        add_submenu_page('reservations', 'Weekly View', 'Weekly View', 'manage_options', 'weekly-view', array($this, 'weekly_view_page'));
-        add_submenu_page('reservations', 'All Reservations', 'All Reservations', 'manage_options', 'all-reservations', array($this, 'all_reservations_page'));
-        add_submenu_page('reservations', 'Settings', 'Settings', 'manage_options', 'res-settings', array($this, 'settings_page'));
-    }
+   // Add this method to your RRS_Admin_Controller class
+public function add_admin_menu() {
+    add_menu_page(
+        'Restaurant Reservations',
+        'Reservations',
+        'manage_options',
+        'reservations',
+        array($this, 'dashboard_page'),
+        'dashicons-calendar-alt',
+        26
+    );
+    
+    add_submenu_page('reservations', 'Dashboard', 'Dashboard', 'manage_options', 'reservations', array($this, 'dashboard_page'));
+    add_submenu_page('reservations', 'Weekly View', 'Weekly View', 'manage_options', 'weekly-view', array($this, 'weekly_view_page'));
+    add_submenu_page('reservations', 'Settings', 'Settings', 'manage_options', 'res-settings', array($this, 'settings_page'));
+}
+
+public function settings_page() {
+    $settings_controller = new RRS_Settings_Controller();
+    $settings_controller->settings_page();
+}
     
     public function enqueue_admin_assets($hook) {
         if (strpos($hook, 'reservations') !== false || 
