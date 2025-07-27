@@ -20,7 +20,14 @@ function rrs_get_property_all($object, $property, $default = '') {
             <h1 style="font-size: 2.5rem; color: #2c3e50; margin: 0;">📋 All Reservations</h1>
             <p style="color: #6c757d; margin: 10px 0 0 0;">Complete reservation management and filtering</p>
         </div>
-        
+        <!-- Add Manual Reservation Button -->
+<div style="text-align: center; margin-bottom: 20px;">
+    <button onclick="showManualReservationModal()" 
+            style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white; border: none; padding: 15px 30px; border-radius: 10px; font-size: 1.1rem; font-weight: bold; cursor: pointer;">
+        ➕ Create Manual Reservation
+    </button>
+</div>
+
         <!-- Filters -->
         <div style="background: #f8f9fa; padding: 25px; border-radius: 15px; margin-bottom: 30px; border: 2px solid #e9ecef;">
             <h3 style="margin: 0 0 20px 0; color: #2c3e50;">🔍 Filter Reservations</h3>
