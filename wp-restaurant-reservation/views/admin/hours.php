@@ -1,293 +1,162 @@
 <?php
 if (!defined('ABSPATH')) exit;
 
-// Helper function for safe property access
-function yrr_get_property_hours($object, $property, $default = '') {
-    return (property_exists($object, $property) && !empty($object->$property)) ? $object->$property : $default;
+// Set defaults
+$hours = isset($hours) ? $hours : array();
+$days_config = array(
+    'monday' => array('name' => 'Monday', 'icon' => '📅'),
+    'tuesday' => array('name' => 'Tuesday', 'icon' => '📅'),
+    'wednesday' => array('name' => 'Wednesday', 'icon' => '📅'),
+    'thursday' => array('name' => 'Thursday', 'icon' => '📅'),
+    'friday' => array('name' => 'Friday', 'icon' => '📅'),
+    'saturday' => array('name' => 'Saturday', 'icon' => '🎉'),
+    'sunday' => array('name' => 'Sunday', 'icon' => '🌟')
+);
+
+// Helper function to safely get hour properties
+function yrr_get_hour_value($hour_obj, $property, $default = '') {
+    if (is_object($hour_obj) && property_exists($hour_obj, $property)) {
+        return $hour_obj->$property;
+    } elseif (is_array($hour_obj) && isset($hour_obj[$property])) {
+        return $hour_obj[$property];
+    }
+    return $default;
+}
+
+// Helper function to format time for display
+function yrr_format_time($time) {
+    if (empty($time) || $time === '00:00:00') return '';
+    return date('H:i', strtotime($time));
 }
 ?>
 
 <div class="wrap">
-    <div style="max-width: 1200px; margin: 20px auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.1);">
+    <div style="max-width: 1200px; margin: 20px auto; background: white; padding: 30px; border-radius: 15px;">
         
-        <!-- Header -->
-        <div style="text-align: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 3px solid #ffc107;">
-            <h1 style="font-size: 2.5rem; color: #2c3e50; margin: 0;">⏰ Operating Hours Management</h1>
-            <p style="color: #6c757d; margin: 10px 0 0 0;">Set weekly operating hours and manage availability</p>
-        </div>
+        <h1 style="text-align: center; color: #2c3e50; margin-bottom: 30px;">🕐 Operating Hours Management</h1>
         
-        <!-- Success Messages -->
-        <?php if (isset($_GET['message'])): ?>
-            <div style="padding: 15px; margin: 20px 0; border-radius: 8px; border: 2px solid; <?php
-                switch($_GET['message']) {
-                    case 'hours_saved':
-                        echo 'background: #d4edda; color: #155724; border-color: #28a745;';
-                        $count = isset($_GET['count']) ? intval($_GET['count']) : 0;
-                        $msg = "✅ Operating hours updated successfully! ($count days configured)";
-                        break;
-                    default:
-                        echo 'background: #f8d7da; color: #721c24; border-color: #dc3545;';
-                        $msg = '❌ An error occurred.';
-                }
-            ?>">
-                <h4 style="margin: 0;"><?php echo $msg; ?></h4>
-            </div>
-        <?php endif; ?>
-        
-        <!-- Current Status Overview -->
-        <div style="background: #e3f2fd; padding: 20px; border-radius: 10px; margin-bottom: 30px; border-left: 5px solid #2196f3;">
-            <h3 style="margin: 0 0 15px 0; color: #1976d2;">📊 Current Operating Status</h3>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px;">
-                <?php
-                $days = array('monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday');
-                $day_labels = array('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday');
-                
-                foreach ($days as $index => $day) {
-                    $day_hours = isset($hours[$day]['all_day']) ? $hours[$day]['all_day'] : null;
-                    $is_closed = $day_hours ? intval(yrr_get_property_hours($day_hours, 'is_closed', 0)) : 0;
-                    $open_time = $day_hours && !$is_closed ? yrr_get_property_hours($day_hours, 'open_time', '10:00:00') : null;
-                    $close_time = $day_hours && !$is_closed ? yrr_get_property_hours($day_hours, 'close_time', '22:00:00') : null;
-                ?>
-                    <div style="text-align: center; padding: 10px; background: white; border-radius: 8px;">
-                        <div style="font-weight: bold; margin-bottom: 5px;"><?php echo $day_labels[$index]; ?></div>
-                        <?php if ($is_closed): ?>
-                            <div style="color: #dc3545; font-weight: bold;">🔴 CLOSED</div>
-                        <?php else: ?>
-                            <div style="color: #28a745; font-size: 0.9rem;">
-                                🟢 <?php echo date('g:i A', strtotime($open_time)); ?><br>
-                                to <?php echo date('g:i A', strtotime($close_time)); ?>
-                            </div>
-                        <?php endif; ?>
-                    </div>
-                <?php } ?>
-            </div>
-        </div>
-        
-        <!-- Operating Hours Form -->
         <form method="post" action="">
             <?php wp_nonce_field('yrr_hours_save', 'hours_nonce'); ?>
+            <input type="hidden" name="save_hours" value="1">
             
-            <div style="background: #fff3cd; padding: 30px; border-radius: 15px; margin-bottom: 30px; border: 3px solid #ffc107;">
-                <h3 style="margin: 0 0 25px 0; color: #856404;">📋 Configure Weekly Operating Hours</h3>
+            <?php foreach ($days_config as $day => $config): ?>
+                <?php 
+                $day_hours = isset($hours[$day]) ? $hours[$day] : null;
+                $is_closed = yrr_get_hour_value($day_hours, 'is_closed', 0);
+                $open_time = yrr_format_time(yrr_get_hour_value($day_hours, 'open_time', '10:00:00'));
+                $close_time = yrr_format_time(yrr_get_hour_value($day_hours, 'close_time', '22:00:00'));
+                ?>
                 
-                <div style="display: grid; gap: 25px;">
-                    <?php foreach ($days as $index => $day): ?>
-                        <?php 
-                        $day_hours = isset($hours[$day]['all_day']) ? $hours[$day]['all_day'] : null;
-                        $is_closed = $day_hours ? intval(yrr_get_property_hours($day_hours, 'is_closed', 0)) : 0;
-                        $open_time = $day_hours ? yrr_get_property_hours($day_hours, 'open_time', '10:00:00') : '10:00:00';
-                        $close_time = $day_hours ? yrr_get_property_hours($day_hours, 'close_time', '22:00:00') : '22:00:00';
+                <div style="background: #f8f9fa; padding: 20px; margin-bottom: 15px; border-radius: 10px; border: 2px solid #e9ecef;">
+                    <div style="display: grid; grid-template-columns: 150px 1fr 1fr 1fr 120px; gap: 15px; align-items: center;">
                         
-                        // Remove seconds from time
-                        $open_time = substr($open_time, 0, 5);
-                        $close_time = substr($close_time, 0, 5);
-                        ?>
-                        
-                        <div style="background: white; padding: 20px; border-radius: 12px; border: 2px solid #e9ecef;">
-                            <div style="display: grid; grid-template-columns: auto 1fr auto auto auto; gap: 20px; align-items: center;">
-                                
-                                <!-- Day Label -->
-                                <div style="min-width: 100px;">
-                                    <h4 style="margin: 0; font-size: 1.2rem; color: #2c3e50;"><?php echo $day_labels[$index]; ?></h4>
-                                    <small style="color: #6c757d;"><?php echo date('M j', strtotime('this ' . $day)); ?></small>
-                                </div>
-                                
-                                <!-- Closed Toggle -->
-                                <div style="text-align: center;">
-                                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-                                        <input type="checkbox" 
-                                               name="<?php echo $day; ?>_closed" 
-                                               value="1" 
-                                               <?php checked($is_closed, 1); ?>
-                                               onchange="toggleDayHours('<?php echo $day; ?>')"
-                                               style="transform: scale(1.5);">
-                                        <span style="font-weight: bold; color: #dc3545;">🔴 Closed</span>
-                                    </label>
-                                </div>
-                                
-                                <!-- Open Time -->
-                                <div>
-                                    <label style="display: block; margin-bottom: 5px; font-weight: bold; color: #28a745;">🕐 Opens</label>
-                                    <input type="time" 
-                                           name="<?php echo $day; ?>_open" 
-                                           value="<?php echo $open_time; ?>"
-                                           id="<?php echo $day; ?>_open"
-                                           <?php echo $is_closed ? 'disabled' : ''; ?>
-                                           style="padding: 8px; border: 2px solid #e9ecef; border-radius: 6px; font-size: 1rem; <?php echo $is_closed ? 'background: #f8f9fa; color: #6c757d;' : ''; ?>">
-                                </div>
-                                
-                                <!-- Close Time -->
-                                <div>
-                                    <label style="display: block; margin-bottom: 5px; font-weight: bold; color: #dc3545;">🕕 Closes</label>
-                                    <input type="time" 
-                                           name="<?php echo $day; ?>_close" 
-                                           value="<?php echo $close_time; ?>"
-                                           id="<?php echo $day; ?>_close"
-                                           <?php echo $is_closed ? 'disabled' : ''; ?>
-                                           style="padding: 8px; border: 2px solid #e9ecef; border-radius: 6px; font-size: 1rem; <?php echo $is_closed ? 'background: #f8f9fa; color: #6c757d;' : ''; ?>">
-                                </div>
-                                
-                                <!-- Status Indicator -->
-                                <div style="text-align: center; min-width: 80px;">
-                                    <div id="<?php echo $day; ?>_status" style="padding: 8px 12px; border-radius: 15px; font-size: 0.8rem; font-weight: bold; text-transform: uppercase; <?php echo $is_closed ? 'background: #f8d7da; color: #721c24;' : 'background: #d4edda; color: #155724;'; ?>">
-                                        <?php echo $is_closed ? 'CLOSED' : 'OPEN'; ?>
-                                    </div>
-                                </div>
-                            </div>
+                        <!-- Day Name -->
+                        <div style="font-weight: bold; font-size: 1.1rem; color: #2c3e50;">
+                            <?php echo $config['icon']; ?> <?php echo $config['name']; ?>
                         </div>
                         
-                    <?php endforeach; ?>
-                </div>
-                
-                <!-- Quick Actions -->
-                <div style="margin-top: 30px; padding-top: 20px; border-top: 2px solid #ffc107; text-align: center;">
-                    <h4 style="margin: 0 0 15px 0; color: #856404;">⚡ Quick Actions</h4>
-                    <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
-                        <button type="button" onclick="setAllHours('10:00', '22:00')" 
-                                style="background: #28a745; color: white; border: none; padding: 10px 15px; border-radius: 6px; font-size: 0.9rem; cursor: pointer;">
-                            🏪 Standard Hours (10 AM - 10 PM)
-                        </button>
-                        <button type="button" onclick="setWeekendHours()" 
-                                style="background: #007cba; color: white; border: none; padding: 10px 15px; border-radius: 6px; font-size: 0.9rem; cursor: pointer;">
-                            🎉 Weekend Extended Hours
-                        </button>
-                        <button type="button" onclick="closeAllDays()" 
-                                style="background: #dc3545; color: white; border: none; padding: 10px 15px; border-radius: 6px; font-size: 0.9rem; cursor: pointer;">
-                            🔴 Close All Days
-                        </button>
-                        <button type="button" onclick="openAllDays()" 
-                                style="background: #ffc107; color: black; border: none; padding: 10px 15px; border-radius: 6px; font-size: 0.9rem; cursor: pointer;">
-                            🟢 Open All Days
-                        </button>
+                        <!-- Open Time -->
+                        <div>
+                            <label style="display: block; margin-bottom: 5px; font-weight: bold; color: #155724;">Open Time</label>
+                            <input type="time" 
+                                   name="<?php echo $day; ?>_open" 
+                                   id="<?php echo $day; ?>_open"
+                                   value="<?php echo $open_time; ?>" 
+                                   <?php echo $is_closed ? 'disabled' : ''; ?>
+                                   onchange="updateTimeDisplay('<?php echo $day; ?>')"
+                                   style="width: 100%; padding: 8px; border: 2px solid #28a745; border-radius: 5px;">
+                        </div>
+                        
+                        <!-- Close Time -->
+                        <div>
+                            <label style="display: block; margin-bottom: 5px; font-weight: bold; color: #dc3545;">Close Time</label>
+                            <input type="time" 
+                                   name="<?php echo $day; ?>_close" 
+                                   id="<?php echo $day; ?>_close"
+                                   value="<?php echo $close_time; ?>" 
+                                   <?php echo $is_closed ? 'disabled' : ''; ?>
+                                   onchange="updateTimeDisplay('<?php echo $day; ?>')"
+                                   style="width: 100%; padding: 8px; border: 2px solid #dc3545; border-radius: 5px;">
+                        </div>
+                        
+                        <!-- Status Display -->
+                        <div id="<?php echo $day; ?>_status" style="text-align: center; font-weight: bold;">
+                            <!-- Will be updated by JavaScript -->
+                        </div>
+                        
+                        <!-- Closed Checkbox -->
+                        <div style="text-align: center;">
+                            <label style="display: flex; align-items: center; gap: 5px; justify-content: center; cursor: pointer;">
+                                <input type="checkbox" 
+                                       name="<?php echo $day; ?>_closed" 
+                                       id="<?php echo $day; ?>_closed"
+                                       value="1" 
+                                       <?php checked($is_closed, 1); ?>
+                                       onchange="updateTimeDisplay('<?php echo $day; ?>')"
+                                       style="transform: scale(1.2);">
+                                <span style="font-weight: bold; color: #dc3545;">Closed</span>
+                            </label>
+                        </div>
                     </div>
                 </div>
-                
-                <!-- Save Button -->
-                <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 2px solid #ffc107;">
-                    <button type="submit" name="save_hours" value="1"
-                            style="background: linear-gradient(135deg, #ffc107 0%, #e0a800 100%); color: white; border: none; padding: 20px 50px; border-radius: 12px; font-size: 1.3rem; font-weight: bold; cursor: pointer;">
-                        ⏰ Save Operating Hours
-                    </button>
-                    <p style="margin-top: 10px; color: #6c757d;">Changes will apply immediately to booking availability</p>
-                </div>
+            <?php endforeach; ?>
+            
+            <!-- Save Button -->
+            <div style="text-align: center; margin-top: 30px;">
+                <button type="submit" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white; border: none; padding: 15px 30px; border-radius: 10px; font-size: 1.1rem; font-weight: bold; cursor: pointer;">
+                    💾 Save Operating Hours
+                </button>
             </div>
         </form>
-        
-        <!-- Navigation -->
-        <div style="text-align: center; margin-top: 30px;">
-            <a href="<?php echo admin_url('admin.php?page=yenolx-reservations'); ?>" 
-               style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px 30px; text-decoration: none; border-radius: 10px; font-weight: bold; margin-right: 15px;">
-                📊 Dashboard
-            </a>
-            <a href="<?php echo admin_url('admin.php?page=yrr-tables'); ?>" 
-               style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white; padding: 15px 30px; text-decoration: none; border-radius: 10px; font-weight: bold;">
-                🍽️ Tables Management
-            </a>
-        </div>
     </div>
 </div>
 
 <script>
-function toggleDayHours(day) {
-    const checkbox = document.querySelector(`input[name="${day}_closed"]`);
-    const openInput = document.getElementById(`${day}_open`);
-    const closeInput = document.getElementById(`${day}_close`);
-    const statusDiv = document.getElementById(`${day}_status`);
+function updateTimeDisplay(day) {
+    const openInput = document.getElementById(day + '_open');
+    const closeInput = document.getElementById(day + '_close');
+    const closedCheckbox = document.getElementById(day + '_closed');
+    const statusDiv = document.getElementById(day + '_status');
     
-    if (checkbox.checked) {
+    if (!openInput || !closeInput || !closedCheckbox || !statusDiv) return;
+    
+    if (closedCheckbox.checked) {
+        statusDiv.innerHTML = '<span style="color: #dc3545;">🔴 CLOSED</span>';
         openInput.disabled = true;
         closeInput.disabled = true;
-        openInput.style.background = '#f8f9fa';
-        openInput.style.color = '#6c757d';
-        closeInput.style.background = '#f8f9fa';
-        closeInput.style.color = '#6c757d';
-        statusDiv.textContent = 'CLOSED';
-        statusDiv.style.background = '#f8d7da';
-        statusDiv.style.color = '#721c24';
+        openInput.style.opacity = '0.5';
+        closeInput.style.opacity = '0.5';
     } else {
         openInput.disabled = false;
         closeInput.disabled = false;
-        openInput.style.background = 'white';
-        openInput.style.color = 'black';
-        closeInput.style.background = 'white';
-        closeInput.style.color = 'black';
-        statusDiv.textContent = 'OPEN';
-        statusDiv.style.background = '#d4edda';
-        statusDiv.style.color = '#155724';
-    }
-}
-
-function setAllHours(openTime, closeTime) {
-    const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-    
-    days.forEach(day => {
-        const checkbox = document.querySelector(`input[name="${day}_closed"]`);
-        if (!checkbox.checked) {
-            document.getElementById(`${day}_open`).value = openTime;
-            document.getElementById(`${day}_close`).value = closeTime;
+        openInput.style.opacity = '1';
+        closeInput.style.opacity = '1';
+        
+        const openTime = openInput.value;
+        const closeTime = closeInput.value;
+        
+        if (openTime && closeTime) {
+            const openDisplay = formatTime12Hour(openTime);
+            const closeDisplay = formatTime12Hour(closeTime);
+            statusDiv.innerHTML = `<span style="color: #28a745;">🟢 ${openDisplay} - ${closeDisplay}</span>`;
+        } else {
+            statusDiv.innerHTML = '<span style="color: #ffc107;">⚠️ Set Times</span>';
         }
-    });
-}
-
-function setWeekendHours() {
-    // Friday and Saturday extended hours
-    const checkbox_fri = document.querySelector('input[name="friday_closed"]');
-    const checkbox_sat = document.querySelector('input[name="saturday_closed"]');
-    
-    if (!checkbox_fri.checked) {
-        document.getElementById('friday_open').value = '11:00';
-        document.getElementById('friday_close').value = '23:00';
-    }
-    
-    if (!checkbox_sat.checked) {
-        document.getElementById('saturday_open').value = '11:00';
-        document.getElementById('saturday_close').value = '23:00';
     }
 }
 
-function closeAllDays() {
-    const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-    
-    days.forEach(day => {
-        const checkbox = document.querySelector(`input[name="${day}_closed"]`);
-        checkbox.checked = true;
-        toggleDayHours(day);
-    });
+function formatTime12Hour(time24) {
+    const [hours, minutes] = time24.split(':');
+    const hour12 = hours % 12 || 12;
+    const ampm = hours < 12 ? 'AM' : 'PM';
+    return `${hour12}:${minutes} ${ampm}`;
 }
 
-function openAllDays() {
+// Initialize displays on page load
+document.addEventListener('DOMContentLoaded', function() {
     const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-    
     days.forEach(day => {
-        const checkbox = document.querySelector(`input[name="${day}_closed"]`);
-        checkbox.checked = false;
-        toggleDayHours(day);
+        updateTimeDisplay(day);
     });
-}
+});
 </script>
-
-<style>
-@media (max-width: 768px) {
-    div[style*="grid-template-columns: auto 1fr auto auto auto"] {
-        grid-template-columns: 1fr !important;
-        gap: 10px !important;
-    }
-    
-    div[style*="display: flex"] button {
-        font-size: 0.8rem !important;
-        padding: 8px 12px !important;
-    }
-}
-
-button:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-    transition: all 0.3s ease;
-}
-
-input[type="time"]:focus {
-    border-color: #007cba;
-    box-shadow: 0 0 0 2px rgba(0, 123, 186, 0.2);
-    outline: none;
-}
-</style>
