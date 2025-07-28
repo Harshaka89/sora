@@ -4,7 +4,7 @@
         {
             "label": "Git: Update Project",
             "type": "shell",
-            "command": "& { try { git add .; Write-Host 'Changes staged.' -ForegroundColor Green; $msg = 'Update ' + (Get-Date -Format 'yyyy-MM-dd HH:mm'); git commit -m \"$msg\"; Write-Host 'Changes committed.' -ForegroundColor Green; git push origin main; Write-Host 'Changes pushed.' -ForegroundColor Green } catch { Write-Host $_.Exception.Message -ForegroundColor Red } }",
+            "command": "git add . && git commit -m \"Update $(Get-Date -Format 'yyyy-MM-dd HH:mm')\" && git push origin main",
             "problemMatcher": [],
             "group": {
                 "kind": "build",
@@ -13,12 +13,14 @@
             "presentation": {
                 "reveal": "always",
                 "panel": "shared",
-                "clear": true
+                "clear": true,
+                "showReuseMessage": false
             },
             "options": {
+                "cwd": "${workspaceFolder}",
                 "shell": {
-                    "executable": "powershell.exe",
-                    "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command"]
+                    "executable": "cmd.exe",
+                    "args": ["/d", "/c"]
                 }
             }
         }
