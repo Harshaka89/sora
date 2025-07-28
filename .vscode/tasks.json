@@ -1,52 +1,35 @@
 {
-    "version": "2.0.0",
-    "tasks": [
-        {
-            "label": "Git: Initialize Repository",
-            "type": "shell",
-            "command": "powershell.exe",
-            "args": [
-                "-NoProfile",
-                "-ExecutionPolicy", "Bypass",
-                "-Command",
-                "if (Test-Path .git) { Remove-Item -Path .git -Recurse -Force }; git init; git config --local core.autocrlf true; git add .; git commit -m \"Initial commit $(Get-Date -Format 'yyyy-MM-dd HH:mm')\"; git branch -M main; git remote remove origin; git remote add origin https://github.com/Harshaka89/sora.git; git push -u origin main --force"
-            ],
-            "problemMatcher": [],
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            },
-            "presentation": {
-                "reveal": "always",
-                "panel": "shared",
-                "clear": true,
-                "showReuseMessage": false
-            },
-            "options": {
-                "cwd": "${workspaceFolder}/wp-restaurant-reservation-1.5"
-            }
-        },
-        {
-            "label": "Git: Update Project",
-            "type": "shell",
-            "command": "powershell.exe",
-            "args": [
-                "-NoProfile",
-                "-ExecutionPolicy", "Bypass",
-                "-Command",
-                "git add .; git commit -m \"Update $(Get-Date -Format 'yyyy-MM-dd HH:mm')\"; git push origin main"
-            ],
-            "problemMatcher": [],
-            "group": "build",
-            "presentation": {
-                "reveal": "always",
-                "panel": "shared",
-                "clear": true,
-                "showReuseMessage": false
-            },
-            "options": {
-                "cwd": "${workspaceFolder}/wp-restaurant-reservation-1.5"
-            }
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "💥 Force Push Full Project to GitHub",
+      "type": "shell",
+      "command": "cmd.exe",
+      "args": [
+        "/d",
+        "/c",
+        "git add . && git commit -m \"Full project update %date% %time%\" && git push --force"
+      ],
+      "problemMatcher": [],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": false,
+        "clear": true
+      },
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "shell": {
+          "executable": "cmd.exe",
+          "args": ["/d", "/c"]
         }
-    ]
+      }
+    }
+  ]
 }
