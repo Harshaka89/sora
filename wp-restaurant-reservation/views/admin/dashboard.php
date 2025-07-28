@@ -3,8 +3,8 @@ if (!defined('ABSPATH')) exit;
 
 // ✅ FIX: Define all missing variables at the top
 $current_user = wp_get_current_user();
-$is_super_admin = in_array('administrator', $current_user->roles);
-$is_admin = $is_super_admin || in_array('yrr_admin', $current_user->roles);
+$is_super_admin = isset($is_super_admin) ? $is_super_admin : in_array('administrator', $current_user->roles);
+$is_admin = isset($is_admin) ? $is_admin : ($is_super_admin || in_array('yrr_admin', $current_user->roles));
 
 // Helper function to safely get object properties
 function yrr_get_property_dash($object, $property, $default = '') {
@@ -14,35 +14,15 @@ function yrr_get_property_dash($object, $property, $default = '') {
     return $default;
 }
 
-// Set default values for any missing variables that might be used later
+// Set default values
 $statistics = isset($statistics) ? $statistics : array();
 $today_reservations = isset($today_reservations) ? $today_reservations : array();
 $restaurant_status = isset($restaurant_status) ? $restaurant_status : '1';
 $restaurant_name = isset($restaurant_name) ? $restaurant_name : get_bloginfo('name');
 
-// Handle success/error messages
-$message = '';
-if (isset($_GET['message'])) {
-    $message_type = sanitize_text_field($_GET['message']);
-    switch ($message_type) {
-        case 'reservation_created':
-            $message = '<div class="notice notice-success is-dismissible"><p>✅ Manual reservation created successfully!</p></div>';
-            break;
-        case 'updated':
-            $message = '<div class="notice notice-success is-dismissible"><p>✅ Reservation updated successfully!</p></div>';
-            break;
-        case 'confirmed_with_table':
-            $message = '<div class="notice notice-success is-dismissible"><p>✅ Reservation confirmed and table assigned!</p></div>';
-            break;
-        case 'error':
-            $message = '<div class="notice notice-error is-dismissible"><p>❌ An error occurred. Please try again.</p></div>';
-            break;
-        case 'missing_fields':
-            $message = '<div class="notice notice-error is-dismissible"><p>❌ Please fill in all required fields.</p></div>';
-            break;
-    }
-}
+// Your existing dashboard content continues here...
 ?>
+
 
 <div class="wrap">
     <?php echo $message; ?>

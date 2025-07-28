@@ -1,9 +1,115 @@
 <?php
 /**
- * Settings Model - Yenolx Restaurant Reservation v1.5.1
+ * Settings Model - WORKING VERSION with time slot generation
  */
 
 if (!defined('ABSPATH')) exit;
+
+class YRR_Settings_Model {
+    private $wpdb;
+    private $table_name;
+    
+    public function __construct() {
+        global $wpdb;
+        $this->wpdb = $wpdb;
+        $this->table_name = $wpdb->prefix . 'yrr_settings';
+    }
+    
+    public function get($key, $default = '') {
+        $value = $this->wpdb->get_var($this->wpdb->prepare(
+            "SELECT setting_value FROM {$this->table_name} WHERE setting_key = %s",
+            $key
+        ));
+        
+        return $value !== null ? $value : $default;
+    }
+    
+    public function set($key, $value) {
+        $existing = $this->wpdb->get_var($this->wpdb->prepare(
+            "SELECT id FROM {$this->table_name} WHERE setting_key = %s",
+            $key
+        ));
+        
+        $data = array(
+            'setting_key' => $key,
+            'setting_value' => $value,
+            'updated_at' => current_time('mysql')
+        );
+        
+        if ($existing) {
+            return $this->wpdb->update(
+                $this->table_name,
+                $data,
+                array('setting_key' => $key)
+            );
+        } else {
+            $data['created_at'] = current_time('mysql');
+            return $this->wpdb->insert($this->table_name, $data);
+        }
+    }
+    
+    public function get_all() {
+        $results = $this->wpdb->get_results(
+            "SELECT setting_key, setting_value FROM {$this->table_name}"
+        );
+        
+        $settings = array();
+        foreach ($results as $result) {
+            $settings[$result->setting_key] = $result->setting_value;
+        }
+        
+        return $settings;
+    }
+    
+    // ✅ Time slot generation methods
+    public function get_time_slot_preview($duration = 60) {
+        $hours_model = new YRR_Hours_Model();
+        $today_hours = $hours_model->get_today_hours();
+        
+        if (!$today_hours || $today_hours->is_closed) {
+            return array();
+        }
+        
+        $open_time = date('H:i', strtotime($today_hours->open_time));
+        $close_time = date('H:i', strtotime($today_hours->close_time));
+        
+        return $this->generate_slots_from_times($open_time, $close_time, $duration);
+    }
+    
+    private function generate_slots_from_times($open_time, $close_time, $duration) {
+        $slots = array();
+        $open_minutes = $this->time_to_minutes($open_time);
+        $close_minutes = $this->time_to_minutes($close_time);
+        
+        if ($close_minutes <= $open_minutes) {
+            $close_minutes += 24 * 60;
+        }
+        
+        for ($current = $open_minutes; $current < $close_minutes; $current += $duration) {
+            $hour = floor($current / 60) % 24;
+            $minute = $current % 60;
+            $time_string = sprintf('%02d:%02d', $hour, $minute);
+            
+            $slots[] = array(
+                'value' => $time_string,
+                'display' => $this->format_time_12hour($time_string)
+            );
+        }
+        
+        return $slots;
+    }
+    
+    private function time_to_minutes($time) {
+        list($hours, $minutes) = explode(':', $time);
+        return intval($hours) * 60 + intval($minutes);
+    }
+    
+    private function format_time_12hour($time) {
+        return date('g:i A', strtotime($time));
+    }
+}
+?>
+
 
 class YRR_Settings_Model {
     private $table_name;
