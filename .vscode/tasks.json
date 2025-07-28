@@ -2,13 +2,12 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "💥 Force Push Full Project to GitHub",
+      "label": "Git: Sync and Push (PowerShell)",
       "type": "shell",
-      "command": "cmd.exe",
+      "command": "powershell",
       "args": [
-        "/d",
-        "/c",
-        "git add . && git commit -m \"Full project update %date% %time%\" && git push --force"
+        "-Command",
+        "git add .; git commit -m \"Full update $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')\"; git push --force"
       ],
       "problemMatcher": [],
       "group": {
@@ -24,11 +23,7 @@
         "clear": true
       },
       "options": {
-        "cwd": "${workspaceFolder}",
-        "shell": {
-          "executable": "cmd.exe",
-          "args": ["/d", "/c"]
-        }
+        "cwd": "${workspaceFolder}"
       }
     }
   ]
