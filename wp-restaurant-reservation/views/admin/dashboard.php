@@ -9,8 +9,14 @@ function yrr_get_property_dash($object, $property, $default = '') {
     return $default;
 }
 
-// Rest of your dashboard code continues here...
+// ✅ FIX: Define missing variables
+$current_user = wp_get_current_user();
+$is_super_admin = isset($is_super_admin) ? $is_super_admin : in_array('administrator', $current_user->roles);
+$is_admin = isset($is_admin) ? $is_admin : ($is_super_admin || in_array('yrr_admin', $current_user->roles));
+
+// Your existing dashboard content continues here...
 ?>
+
 
 // Check user permissions
 $current_user = wp_get_current_user();
