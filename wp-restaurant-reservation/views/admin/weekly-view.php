@@ -1,40 +1,21 @@
+php
 <?php
 if (!defined('ABSPATH')) exit;
 
-// ✅ FIX: Define missing week variables
+// Define missing variables
 $current_week = isset($current_week) ? $current_week : date('Y-m-d', strtotime('monday this week'));
 $weekly_reservations = isset($weekly_reservations) ? $weekly_reservations : array();
 
-// Calculate week dates properly
+// Calculate week dates
 $week_start = date('Y-m-d', strtotime($current_week));
 $week_end = date('Y-m-d', strtotime($week_start . ' +6 days'));
 
-// Helper function for safe property access
+// Helper function
 function yrr_get_weekly_property($object, $property, $default = '') {
     return (is_object($object) && property_exists($object, $property) && !empty($object->$property)) ? $object->$property : $default;
 }
 
-// Generate days of the week
-$days_of_week = array();
-for ($i = 0; $i < 7; $i++) {
-    $day_date = date('Y-m-d', strtotime($week_start . ' +' . $i . ' days'));
-    $days_of_week[] = array(
-        'date' => $day_date,
-        'day_name' => date('l', strtotime($day_date)),
-        'day_short' => date('D', strtotime($day_date)),
-        'day_number' => date('j', strtotime($day_date))
-    );
-}
-
-// Organize reservations by date
-$reservations_by_date = array();
-foreach ($weekly_reservations as $reservation) {
-    $date = $reservation->reservation_date;
-    if (!isset($reservations_by_date[$date])) {
-        $reservations_by_date[$date] = array();
-    }
-    $reservations_by_date[$date][] = $reservation;
-}
+// Rest of your existing weekly-view.php code continues...
 ?>
 
 <div class="wrap">

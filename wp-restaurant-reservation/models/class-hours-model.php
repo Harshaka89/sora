@@ -76,6 +76,50 @@ public function get_day_hours($day) {
     ));
 }
 
+
+/**
+ * Get today's operating hours
+ */
+public function get_today_hours() {
+    $today = strtolower(date('l')); // Gets current day (monday, tuesday, etc.)
+    return $this->wpdb->get_row($this->wpdb->prepare(
+        "SELECT * FROM {$this->table_name} WHERE day_of_week = %s",
+        $today
+    ));
+}
+
+/**
+ * Get hours for specific day
+ */
+public function get_day_hours($day) {
+    return $this->wpdb->get_row($this->wpdb->prepare(
+        "SELECT * FROM {$this->table_name} WHERE day_of_week = %s",
+        $day
+    ));
+}
+
+/**
+ * Update all hours efficiently
+ */
+public function update_all_hours($hours_data) {
+    $success_count = 0;
+    
+    foreach ($hours_data as $day => $data) {
+        if ($this->set_hours(
+            $day,
+            $data['open_time'],
+            $data['close_time'],
+            $data['is_closed'],
+            $data['break_start'] ?? null,
+            $data['break_end'] ?? null
+        )) {
+            $success_count++;
+        }
+    }
+    
+    return $success_count;
+}
+
     public function get_available_time_slots($date, $slot_duration = 30) {
         $day_of_week = strtolower(date('l', strtotime($date)));
         

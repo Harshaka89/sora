@@ -156,18 +156,22 @@ class YRR_Admin_Controller {
     }
     
     // ✅ FIXED: Weekly reservations using your existing weekly-view.php
-    public function weekly_reservations_page() {
-        $this->check_permissions('yrr_manage_reservations');
-        
-        $current_week = isset($_GET['week']) ? sanitize_text_field($_GET['week']) : date('Y-m-d', strtotime('monday this week'));
-        $weekly_reservations = $this->reservation_model->get_weekly_reservations($current_week);
-        
-        // Load your existing weekly-view.php file
-        $this->load_view('admin/weekly-view', array(
-            'weekly_reservations' => $weekly_reservations,
-            'current_week' => $current_week
-        ));
-    }
+ public function weekly_reservations_page() {
+    $this->check_permissions('yrr_manage_reservations');
+    
+    // Get current week or requested week
+    $current_week = isset($_GET['week']) ? sanitize_text_field($_GET['week']) : date('Y-m-d', strtotime('monday this week'));
+    
+    // Get weekly reservations data
+    $weekly_reservations = $this->reservation_model->get_weekly_reservations($current_week);
+    
+    // Load your existing weekly-view.php file
+    $this->load_view('admin/weekly-view', array(
+        'weekly_reservations' => $weekly_reservations,
+        'current_week' => $current_week
+    ));
+}
+
     
     public function table_schedule_page() {
         $this->check_permissions('yrr_manage_reservations');
