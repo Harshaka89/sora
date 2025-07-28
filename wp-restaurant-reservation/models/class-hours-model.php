@@ -58,6 +58,24 @@ class YRR_Hours_Model {
         return !empty($hours);
     }
     
+    /**
+ * Get today's hours
+ */
+public function get_today_hours() {
+    $today = strtolower(date('l')); // monday, tuesday, etc.
+    return $this->get_day_hours($today);
+}
+
+/**
+ * Get hours for a specific day
+ */
+public function get_day_hours($day) {
+    return $this->wpdb->get_row($this->wpdb->prepare(
+        "SELECT * FROM {$this->table_name} WHERE day_of_week = %s",
+        $day
+    ));
+}
+
     public function get_available_time_slots($date, $slot_duration = 30) {
         $day_of_week = strtolower(date('l', strtotime($date)));
         
