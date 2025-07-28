@@ -1,9 +1,13 @@
 <?php
 if (!defined('ABSPATH')) exit;
 
-function rrs_get_property_weekly($object, $property, $default = '') {
-    return (property_exists($object, $property) && !empty($object->$property)) ? $object->$property : $default;
+// Helper function for your existing weekly view
+function yrr_get_weekly_property($object, $property, $default = '') {
+    return (is_object($object) && property_exists($object, $property) && !empty($object->$property)) ? $object->$property : $default;
 }
+
+// Your existing weekly view code continues...
+?>
 
 $week_start = isset($_GET['week']) ? sanitize_text_field($_GET['week']) : date('Y-m-d', strtotime('monday this week'));
 $week_end = date('Y-m-d', strtotime($week_start . ' +6 days'));

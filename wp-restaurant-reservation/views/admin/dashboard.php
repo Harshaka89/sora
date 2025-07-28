@@ -9,6 +9,9 @@ function yrr_get_property_dash($object, $property, $default = '') {
     return $default;
 }
 
+// Rest of your dashboard code continues here...
+?>
+
 // Check user permissions
 $current_user = wp_get_current_user();
 $is_super_admin = in_array('administrator', $current_user->roles);

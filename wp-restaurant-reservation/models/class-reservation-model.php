@@ -169,6 +169,31 @@ class YRR_Reservation_Model {
         }
     }
     
+public function get_weekly_reservations($start_date = null) {
+    if (!$start_date) {
+        $start_date = date('Y-m-d', strtotime('monday this week'));
+    }
+    
+    $end_date = date('Y-m-d', strtotime($start_date . ' +6 days'));
+    
+    return $this->wpdb->get_results($this->wpdb->prepare(
+        "SELECT * FROM {$this->table_name} 
+         WHERE reservation_date BETWEEN %s AND %s 
+         AND status IN ('confirmed', 'pending', 'cancelled')
+         ORDER BY reservation_date ASC, reservation_time ASC",
+        $start_date, $end_date
+    ));
+}
+
+public function get_by_id($id) {
+    return $this->wpdb->get_row($this->wpdb->prepare(
+        "SELECT * FROM {$this->table_name} WHERE id = %d",
+        $id
+    ));
+}
+
+    
+    
     private function generate_reservation_code() {
         $prefix = 'YRR';
         $date = date('Ymd');

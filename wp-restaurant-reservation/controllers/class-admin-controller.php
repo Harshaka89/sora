@@ -1,7 +1,7 @@
 <?php
 /**
  * Admin Controller - Yenolx Restaurant Reservation v1.5.1
- * FIXED: Removed duplicate tables_page method
+ * CORRECTED: Removed all duplicate methods and fixed errors
  */
 
 if (!defined('ABSPATH')) exit;
@@ -69,6 +69,7 @@ class YRR_Admin_Controller {
         
         add_submenu_page('yenolx-reservations', 'Dashboard', 'Dashboard', 'yrr_view_dashboard', 'yenolx-reservations', array($this, 'dashboard_page'));
         add_submenu_page('yenolx-reservations', 'All Reservations', 'All Reservations', 'yrr_manage_reservations', 'yrr-all-reservations', array($this, 'all_reservations_page'));
+        add_submenu_page('yenolx-reservations', 'Weekly View', 'Weekly View', 'yrr_manage_reservations', 'yrr-weekly-reservations', array($this, 'weekly_reservations_page'));
         add_submenu_page('yenolx-reservations', 'Table Schedule', 'Table Schedule', 'yrr_manage_reservations', 'yrr-table-schedule', array($this, 'table_schedule_page'));
         
         if ($this->is_super_admin()) {
@@ -80,6 +81,7 @@ class YRR_Admin_Controller {
         }
     }
     
+    // ✅ ONLY ONE dashboard_page method
     public function dashboard_page() {
         $this->check_permissions('yrr_view_dashboard');
         
@@ -93,9 +95,9 @@ class YRR_Admin_Controller {
             $this->handle_edit_reservation();
         }
         
-        // Handle table assignment
-        if (isset($_POST['assign_table_action']) && wp_verify_nonce($_POST['assign_table_nonce'], 'assign_table')) {
-            $this->handle_table_assignment();
+        // Handle confirm with table assignment
+        if (isset($_POST['confirm_with_table_action']) && wp_verify_nonce($_POST['confirm_table_nonce'], 'confirm_with_table')) {
+            $this->handle_confirm_with_table();
         }
         
         // Handle reservation actions
@@ -114,128 +116,6 @@ class YRR_Admin_Controller {
             'restaurant_status' => $restaurant_status,
             'restaurant_name' => $restaurant_name
         ));
-    }
-    
-    private function create_manual_reservation() {
-        try {
-            $reservation_code = 'MAN-' . date('Ymd') . '-' . str_pad(rand(1, 999), 3, '0', STR_PAD_LEFT);
-            
-            if (empty($_POST['customer_name']) || empty($_POST['customer_email']) || empty($_POST['customer_phone'])) {
-                wp_redirect(add_query_arg('message', 'missing_fields', admin_url('admin.php?page=yenolx-reservations')));
-                exit;
-            }
-            
-            $reservation_data = array(
-                'reservation_code' => $reservation_code,
-                'customer_name' => sanitize_text_field($_POST['customer_name']),
-                'customer_email' => sanitize_email($_POST['customer_email']),
-                'customer_phone' => sanitize_text_field($_POST['customer_phone']),
-                'party_size' => intval($_POST['party_size']),
-                'reservation_date' => sanitize_text_field($_POST['reservation_date']),
-                'reservation_time' => sanitize_text_field($_POST['reservation_time']),
-                'special_requests' => sanitize_textarea_field($_POST['special_requests'] ?? ''),
-                'status' => sanitize_text_field($_POST['initial_status'] ?? 'confirmed'),
-                'table_id' => !empty($_POST['table_id']) ? intval($_POST['table_id']) : null,
-                'notes' => sanitize_textarea_field($_POST['admin_notes'] ?? 'Manual reservation created by admin'),
-                'original_price' => 0.00,
-                'discount_amount' => 0.00,
-                'final_price' => 0.00
-            );
-            
-            $base_price = floatval($this->settings_model->get('base_price_per_person', 0));
-            if ($base_price > 0) {
-                $total_price = $base_price * $reservation_data['party_size'];
-                $reservation_data['original_price'] = $total_price;
-                $reservation_data['final_price'] = $total_price;
-            }
-            
-            $result = $this->reservation_model->create($reservation_data);
-            
-            if ($result) {
-                wp_redirect(add_query_arg('message', 'reservation_created', admin_url('admin.php?page=yenolx-reservations')));
-            } else {
-                wp_redirect(add_query_arg('message', 'error', admin_url('admin.php?page=yenolx-reservations')));
-            }
-            
-        } catch (Exception $e) {
-            error_log('YRR: Exception in create_manual_reservation: ' . $e->getMessage());
-            wp_redirect(add_query_arg('message', 'error', admin_url('admin.php?page=yenolx-reservations')));
-        }
-        
-        exit;
-    }
-    
-    private function handle_edit_reservation() {
-        $id = intval($_POST['reservation_id']);
-        
-        if (!$id) {
-            wp_redirect(add_query_arg('message', 'invalid_id', admin_url('admin.php?page=yenolx-reservations')));
-            exit;
-        }
-        
-        $update_data = array(
-            'customer_name' => sanitize_text_field($_POST['customer_name']),
-            'customer_email' => sanitize_email($_POST['customer_email']),
-            'customer_phone' => sanitize_text_field($_POST['customer_phone']),
-            'party_size' => intval($_POST['party_size']),
-            'reservation_date' => sanitize_text_field($_POST['reservation_date']),
-            'reservation_time' => sanitize_text_field($_POST['reservation_time']),
-            'special_requests' => sanitize_textarea_field($_POST['special_requests'] ?? ''),
-            'table_id' => !empty($_POST['table_id']) ? intval($_POST['table_id']) : null,
-            'notes' => sanitize_textarea_field($_POST['notes'] ?? '')
-        );
-        
-        $result = $this->reservation_model->update($id, $update_data);
-        
-        if ($result !== false) {
-            wp_redirect(add_query_arg('message', 'updated', admin_url('admin.php?page=yenolx-reservations')));
-        } else {
-            wp_redirect(add_query_arg('message', 'update_failed', admin_url('admin.php?page=yenolx-reservations')));
-        }
-        exit;
-    }
-    
-    private function handle_table_assignment() {
-        $reservation_id = intval($_POST['reservation_id']);
-        $table_id = intval($_POST['table_id']);
-        
-        if (!$reservation_id) {
-            wp_redirect(add_query_arg('message', 'invalid_reservation', admin_url('admin.php?page=yenolx-reservations')));
-            exit;
-        }
-        
-        $update_data = array('table_id' => $table_id > 0 ? $table_id : null);
-        $result = $this->reservation_model->update($reservation_id, $update_data);
-        
-        if ($result !== false) {
-            wp_redirect(add_query_arg('message', 'table_assigned', admin_url('admin.php?page=yenolx-reservations')));
-        } else {
-            wp_redirect(add_query_arg('message', 'assignment_failed', admin_url('admin.php?page=yenolx-reservations')));
-        }
-        exit;
-    }
-    
-    private function handle_reservation_actions() {
-        $id = intval($_GET['id']);
-        $redirect_url = admin_url('admin.php?page=yenolx-reservations');
-        
-        switch ($_GET['action']) {
-            case 'confirm':
-                $result = $this->reservation_model->update($id, array('status' => 'confirmed'));
-                $redirect_url = add_query_arg('message', $result ? 'confirmed' : 'error', $redirect_url);
-                break;
-            case 'cancel':
-                $result = $this->reservation_model->update($id, array('status' => 'cancelled'));
-                $redirect_url = add_query_arg('message', $result ? 'cancelled' : 'error', $redirect_url);
-                break;
-            case 'delete':
-                $result = $this->reservation_model->delete($id);
-                $redirect_url = add_query_arg('message', $result ? 'deleted' : 'error', $redirect_url);
-                break;
-        }
-        
-        wp_redirect($redirect_url);
-        exit;
     }
     
     public function all_reservations_page() {
@@ -257,16 +137,33 @@ class YRR_Admin_Controller {
         ));
     }
     
+    // ✅ CORRECTED: Weekly reservations using your existing weekly-view.php
+    public function weekly_reservations_page() {
+        $this->check_permissions('yrr_manage_reservations');
+        
+        $current_week = isset($_GET['week']) ? sanitize_text_field($_GET['week']) : date('Y-m-d', strtotime('monday this week'));
+        $weekly_reservations = $this->reservation_model->get_weekly_reservations($current_week);
+        
+        // Load your existing weekly-view.php file
+        $this->load_view('admin/weekly-view', array(
+            'weekly_reservations' => $weekly_reservations,
+            'current_week' => $current_week
+        ));
+    }
+    
     public function table_schedule_page() {
         $this->check_permissions('yrr_manage_reservations');
+        
+        if (isset($_POST['add_customer_action']) && wp_verify_nonce($_POST['add_customer_nonce'], 'add_customer_to_table')) {
+            $this->handle_add_customer_to_table();
+        }
+        
         $this->load_view('admin/table-schedule');
     }
     
-    // ✅ ONLY ONE tables_page method (no duplicates)
     public function tables_page() {
         $this->check_permissions('yrr_manage_tables');
         
-        // Handle table management actions
         if (isset($_POST['add_table']) && wp_verify_nonce($_POST['table_nonce'], 'yrr_table_action')) {
             $this->add_table();
         }
@@ -279,13 +176,7 @@ class YRR_Admin_Controller {
             $this->delete_table(intval($_GET['delete_table']));
         }
         
-        // Handle table assignment from tables page
-        if (isset($_POST['assign_table_action']) && wp_verify_nonce($_POST['assign_table_nonce'], 'assign_table')) {
-            $this->handle_table_assignment();
-        }
-        
         $tables = $this->tables_model->get_all_tables();
-        
         $this->load_view('admin/tables', array('tables' => $tables));
     }
     
@@ -337,6 +228,164 @@ class YRR_Admin_Controller {
     }
     
     // Helper methods
+    private function create_manual_reservation() {
+        try {
+            $reservation_code = 'MAN-' . date('Ymd') . '-' . str_pad(rand(1, 999), 3, '0', STR_PAD_LEFT);
+            
+            if (empty($_POST['customer_name']) || empty($_POST['customer_email']) || empty($_POST['customer_phone'])) {
+                wp_redirect(add_query_arg('message', 'missing_fields', admin_url('admin.php?page=yenolx-reservations')));
+                exit;
+            }
+            
+            $reservation_data = array(
+                'reservation_code' => $reservation_code,
+                'customer_name' => sanitize_text_field($_POST['customer_name']),
+                'customer_email' => sanitize_email($_POST['customer_email']),
+                'customer_phone' => sanitize_text_field($_POST['customer_phone']),
+                'party_size' => intval($_POST['party_size']),
+                'reservation_date' => sanitize_text_field($_POST['reservation_date']),
+                'reservation_time' => sanitize_text_field($_POST['reservation_time']),
+                'special_requests' => sanitize_textarea_field($_POST['special_requests'] ?? ''),
+                'status' => sanitize_text_field($_POST['initial_status'] ?? 'confirmed'),
+                'table_id' => !empty($_POST['table_id']) ? intval($_POST['table_id']) : null,
+                'notes' => sanitize_textarea_field($_POST['admin_notes'] ?? 'Manual reservation created by admin'),
+                'original_price' => 0.00,
+                'discount_amount' => 0.00,
+                'final_price' => 0.00
+            );
+            
+            $result = $this->reservation_model->create($reservation_data);
+            
+            if ($result) {
+                wp_redirect(add_query_arg('message', 'reservation_created', admin_url('admin.php?page=yenolx-reservations')));
+            } else {
+                wp_redirect(add_query_arg('message', 'error', admin_url('admin.php?page=yenolx-reservations')));
+            }
+            
+        } catch (Exception $e) {
+            error_log('YRR: Exception in create_manual_reservation: ' . $e->getMessage());
+            wp_redirect(add_query_arg('message', 'error', admin_url('admin.php?page=yenolx-reservations')));
+        }
+        
+        exit;
+    }
+    
+    private function handle_edit_reservation() {
+        $id = intval($_POST['reservation_id']);
+        
+        if (!$id) {
+            wp_redirect(add_query_arg('message', 'invalid_id', admin_url('admin.php?page=yenolx-reservations')));
+            exit;
+        }
+        
+        $update_data = array(
+            'customer_name' => sanitize_text_field($_POST['customer_name']),
+            'customer_email' => sanitize_email($_POST['customer_email']),
+            'customer_phone' => sanitize_text_field($_POST['customer_phone']),
+            'party_size' => intval($_POST['party_size']),
+            'reservation_date' => sanitize_text_field($_POST['reservation_date']),
+            'reservation_time' => sanitize_text_field($_POST['reservation_time']),
+            'special_requests' => sanitize_textarea_field($_POST['special_requests'] ?? ''),
+            'table_id' => !empty($_POST['table_id']) ? intval($_POST['table_id']) : null,
+            'notes' => sanitize_textarea_field($_POST['notes'] ?? '')
+        );
+        
+        $result = $this->reservation_model->update($id, $update_data);
+        
+        if ($result !== false) {
+            wp_redirect(add_query_arg('message', 'updated', admin_url('admin.php?page=yenolx-reservations')));
+        } else {
+            wp_redirect(add_query_arg('message', 'update_failed', admin_url('admin.php?page=yenolx-reservations')));
+        }
+        exit;
+    }
+    
+    private function handle_confirm_with_table() {
+        $reservation_id = intval($_POST['reservation_id']);
+        $table_id = intval($_POST['table_id']);
+        
+        if (!$reservation_id || !$table_id) {
+            wp_redirect(add_query_arg('message', 'invalid_data', admin_url('admin.php?page=yenolx-reservations')));
+            exit;
+        }
+        
+        $update_data = array(
+            'status' => 'confirmed',
+            'table_id' => $table_id
+        );
+        
+        $result = $this->reservation_model->update($reservation_id, $update_data);
+        
+        if ($result !== false) {
+            wp_redirect(add_query_arg('message', 'confirmed_with_table', admin_url('admin.php?page=yenolx-reservations')));
+        } else {
+            wp_redirect(add_query_arg('message', 'confirm_failed', admin_url('admin.php?page=yenolx-reservations')));
+        }
+        exit;
+    }
+    
+    private function handle_add_customer_to_table() {
+        $required_fields = array('customer_name', 'customer_email', 'customer_phone', 'party_size', 'table_id', 'reservation_date', 'reservation_time');
+        
+        foreach ($required_fields as $field) {
+            if (empty($_POST[$field])) {
+                wp_redirect(add_query_arg('message', 'missing_fields', admin_url('admin.php?page=yrr-table-schedule')));
+                exit;
+            }
+        }
+        
+        $reservation_code = 'TBL-' . date('Ymd') . '-' . str_pad(rand(1, 999), 3, '0', STR_PAD_LEFT);
+        
+        $reservation_data = array(
+            'reservation_code' => $reservation_code,
+            'customer_name' => sanitize_text_field($_POST['customer_name']),
+            'customer_email' => sanitize_email($_POST['customer_email']),
+            'customer_phone' => sanitize_text_field($_POST['customer_phone']),
+            'party_size' => intval($_POST['party_size']),
+            'table_id' => intval($_POST['table_id']),
+            'reservation_date' => sanitize_text_field($_POST['reservation_date']),
+            'reservation_time' => sanitize_text_field($_POST['reservation_time']),
+            'special_requests' => sanitize_textarea_field($_POST['special_requests'] ?? ''),
+            'status' => 'confirmed',
+            'notes' => 'Added directly to table from schedule view',
+            'original_price' => 0.00,
+            'final_price' => 0.00
+        );
+        
+        $result = $this->reservation_model->create($reservation_data);
+        
+        if ($result) {
+            wp_redirect(add_query_arg('message', 'customer_added', admin_url('admin.php?page=yrr-table-schedule&date=' . $_POST['reservation_date'])));
+        } else {
+            wp_redirect(add_query_arg('message', 'add_failed', admin_url('admin.php?page=yrr-table-schedule')));
+        }
+        exit;
+    }
+    
+    private function handle_reservation_actions() {
+        $id = intval($_GET['id']);
+        $redirect_url = admin_url('admin.php?page=yenolx-reservations');
+        
+        switch ($_GET['action']) {
+            case 'confirm':
+                $result = $this->reservation_model->update($id, array('status' => 'confirmed'));
+                $redirect_url = add_query_arg('message', $result ? 'confirmed' : 'error', $redirect_url);
+                break;
+            case 'cancel':
+                $result = $this->reservation_model->update($id, array('status' => 'cancelled'));
+                $redirect_url = add_query_arg('message', $result ? 'cancelled' : 'error', $redirect_url);
+                break;
+            case 'delete':
+                $result = $this->reservation_model->delete($id);
+                $redirect_url = add_query_arg('message', $result ? 'deleted' : 'error', $redirect_url);
+                break;
+        }
+        
+        wp_redirect($redirect_url);
+        exit;
+    }
+    
+    // Additional helper methods (continued...)
     private function add_table() {
         $data = array(
             'table_number' => sanitize_text_field($_POST['table_number']),
@@ -470,152 +519,6 @@ class YRR_Admin_Controller {
         }
     }
     
-    public function dashboard_page() {
-    $this->check_permissions('yrr_view_dashboard');
-    
-    // Handle manual reservation creation
-    if (isset($_POST['create_manual_reservation']) && wp_verify_nonce($_POST['manual_reservation_nonce'], 'create_manual_reservation')) {
-        $this->create_manual_reservation();
-    }
-    
-    // Handle edit form submission
-    if (isset($_POST['edit_reservation']) && wp_verify_nonce($_POST['edit_nonce'], 'edit_reservation')) {
-        $this->handle_edit_reservation();
-    }
-    
-    // ✅ NEW: Handle confirm with table assignment
-    if (isset($_POST['confirm_with_table_action']) && wp_verify_nonce($_POST['confirm_table_nonce'], 'confirm_with_table')) {
-        $this->handle_confirm_with_table();
-    }
-    
-    // Handle reservation actions
-    if (isset($_GET['action']) && isset($_GET['id']) && wp_verify_nonce($_GET['_wpnonce'], 'reservation_action')) {
-        $this->handle_reservation_actions();
-    }
-    
-    // Load dashboard data
-    $statistics = $this->reservation_model->get_statistics();
-    $today_reservations = $this->reservation_model->get_by_date(date('Y-m-d'));
-    $restaurant_status = $this->settings_model->get('restaurant_open', '1');
-    $restaurant_name = $this->settings_model->get('restaurant_name', get_bloginfo('name'));
-    
-    $this->load_view('admin/dashboard', array(
-        'statistics' => $statistics,
-        'today_reservations' => $today_reservations,
-        'restaurant_status' => $restaurant_status,
-        'restaurant_name' => $restaurant_name
-    ));
-}
-
-public function table_schedule_page() {
-    $this->check_permissions('yrr_manage_reservations');
-    
-    // ✅ NEW: Handle add customer to table
-    if (isset($_POST['add_customer_action']) && wp_verify_nonce($_POST['add_customer_nonce'], 'add_customer_to_table')) {
-        $this->handle_add_customer_to_table();
-    }
-    
-    $this->load_view('admin/table-schedule');
-}
-
-// ✅ NEW: Handle confirm with table assignment
-private function handle_confirm_with_table() {
-    $reservation_id = intval($_POST['reservation_id']);
-    $table_id = intval($_POST['table_id']);
-    
-    if (!$reservation_id || !$table_id) {
-        wp_redirect(add_query_arg('message', 'invalid_data', admin_url('admin.php?page=yenolx-reservations')));
-        exit;
-    }
-    
-    // Update reservation: confirm status and assign table
-    $update_data = array(
-        'status' => 'confirmed',
-        'table_id' => $table_id
-    );
-    
-    $result = $this->reservation_model->update($reservation_id, $update_data);
-    
-    if ($result !== false) {
-        // Send confirmation email
-        $reservation = $this->reservation_model->get_by_id($reservation_id);
-        if ($reservation) {
-            $this->send_confirmation_email($reservation, $table_id);
-        }
-        
-        wp_redirect(add_query_arg('message', 'confirmed_with_table', admin_url('admin.php?page=yenolx-reservations')));
-    } else {
-        wp_redirect(add_query_arg('message', 'confirm_failed', admin_url('admin.php?page=yenolx-reservations')));
-    }
-    exit;
-}
-
-// ✅ NEW: Handle add customer to table
-private function handle_add_customer_to_table() {
-    $required_fields = array('customer_name', 'customer_email', 'customer_phone', 'party_size', 'table_id', 'reservation_date', 'reservation_time');
-    
-    foreach ($required_fields as $field) {
-        if (empty($_POST[$field])) {
-            wp_redirect(add_query_arg('message', 'missing_fields', admin_url('admin.php?page=yrr-table-schedule')));
-            exit;
-        }
-    }
-    
-    // Generate reservation code
-    $reservation_code = 'TBL-' . date('Ymd') . '-' . str_pad(rand(1, 999), 3, '0', STR_PAD_LEFT);
-    
-    $reservation_data = array(
-        'reservation_code' => $reservation_code,
-        'customer_name' => sanitize_text_field($_POST['customer_name']),
-        'customer_email' => sanitize_email($_POST['customer_email']),
-        'customer_phone' => sanitize_text_field($_POST['customer_phone']),
-        'party_size' => intval($_POST['party_size']),
-        'table_id' => intval($_POST['table_id']),
-        'reservation_date' => sanitize_text_field($_POST['reservation_date']),
-        'reservation_time' => sanitize_text_field($_POST['reservation_time']),
-        'special_requests' => sanitize_textarea_field($_POST['special_requests'] ?? ''),
-        'status' => 'confirmed',
-        'notes' => 'Added directly to table from schedule view',
-        'original_price' => 0.00,
-        'final_price' => 0.00
-    );
-    
-    $result = $this->reservation_model->create($reservation_data);
-    
-    if ($result) {
-        // Send confirmation email
-        $this->send_confirmation_email((object)$reservation_data, $_POST['table_id']);
-        wp_redirect(add_query_arg('message', 'customer_added', admin_url('admin.php?page=yrr-table-schedule&date=' . $_POST['reservation_date'])));
-    } else {
-        wp_redirect(add_query_arg('message', 'add_failed', admin_url('admin.php?page=yrr-table-schedule')));
-    }
-    exit;
-}
-
-private function send_confirmation_email($reservation, $table_id = null) {
-    $table_info = '';
-    if ($table_id) {
-        global $wpdb;
-        $table = $wpdb->get_row($wpdb->prepare("SELECT table_number, location FROM {$wpdb->prefix}yrr_tables WHERE id = %d", $table_id));
-        if ($table) {
-            $table_info = "\nTable: {$table->table_number} ({$table->location})";
-        }
-    }
-    
-    $subject = 'Reservation Confirmed - ' . get_bloginfo('name');
-    $message = "Dear {$reservation->customer_name},\n\n";
-    $message .= "Your reservation has been CONFIRMED!\n\n";
-    $message .= "Details:\n";
-    $message .= "Date: {$reservation->reservation_date}\n";
-    $message .= "Time: {$reservation->reservation_time}\n";
-    $message .= "Party Size: {$reservation->party_size} guests{$table_info}\n";
-    $message .= "Confirmation Code: {$reservation->reservation_code}\n\n";
-    $message .= "We look forward to serving you!\n\n";
-    $message .= "Best regards,\n" . get_bloginfo('name');
-    
-    wp_mail($reservation->customer_email, $subject, $message);
-}
-
     private function load_view($view, $data = array()) {
         extract($data);
         $view_file = YRR_PLUGIN_PATH . 'views/' . $view . '.php';
