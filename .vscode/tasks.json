@@ -2,9 +2,15 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "Git: Update Project",
+            "label": "Git: Initialize Repository",
             "type": "shell",
-            "command": "git pull origin main && git add . && git commit -m \"Project update %date% %time%\" && git push origin main",
+            "command": "powershell.exe",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy", "Bypass",
+                "-Command",
+                "if (Test-Path .git) { Remove-Item -Path .git -Recurse -Force }; git init; git config --local core.autocrlf true; git add .; git commit -m \"Initial commit $(Get-Date -Format 'yyyy-MM-dd HH:mm')\"; git branch -M main; git remote remove origin; git remote add origin https://github.com/Harshaka89/sora.git; git push -u origin main --force"
+            ],
             "problemMatcher": [],
             "group": {
                 "kind": "build",
@@ -17,11 +23,29 @@
                 "showReuseMessage": false
             },
             "options": {
-                "cwd": "${workspaceFolder}",
-                "shell": {
-                    "executable": "cmd.exe",
-                    "args": ["/d", "/c"]
-                }
+                "cwd": "${workspaceFolder}/wp-restaurant-reservation-1.5"
+            }
+        },
+        {
+            "label": "Git: Update Project",
+            "type": "shell",
+            "command": "powershell.exe",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy", "Bypass",
+                "-Command",
+                "git add .; git commit -m \"Update $(Get-Date -Format 'yyyy-MM-dd HH:mm')\"; git push origin main"
+            ],
+            "problemMatcher": [],
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "clear": true,
+                "showReuseMessage": false
+            },
+            "options": {
+                "cwd": "${workspaceFolder}/wp-restaurant-reservation-1.5"
             }
         }
     ]
